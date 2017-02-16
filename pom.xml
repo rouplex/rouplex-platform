@@ -57,10 +57,10 @@
     </dependencies>
 
     <modules>
-        <module>common</module>
+        <module>commons</module>
+        <module>jersey-binder</module>
         <module>platform</module>
         <module>platform-jaxrs</module>
         <module>platform-jaxrs-client</module>
-        <module>platform-jersey-server</module>
     </modules>
 </project>

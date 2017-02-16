@@ -1,6 +1,6 @@
 package org.rouplex.jaxrs.client;
 
-import org.rouplex.common.reflections.RouplexReflections;
+import org.rouplex.commons.reflections.RouplexReflections;
 
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
@@ -103,7 +103,7 @@ public class RouplexClientBuilder<T> extends ClientBuilder {
 
         Path path = null;
 
-        for (Annotation classAnnotation : RouplexReflections.getAnnotationsCollection(clazz)) {
+        for (Annotation classAnnotation : RouplexReflections.getAllAnnotationsCollection(clazz)) {
             if (Path.class.isAssignableFrom(classAnnotation.getClass())) {
                 Path probe = (Path) classAnnotation;
                 if (path == null) {
@@ -119,7 +119,7 @@ public class RouplexClientBuilder<T> extends ClientBuilder {
 //        Collection<Method> methods = RouplexReflections.getPublicAbstractInstanceMethods(clazz);
 
 
-        Collection<Annotation> classAnnotations = RouplexReflections.getAnnotationsCollection(clazz);
+        Collection<Annotation> classAnnotations = RouplexReflections.getAllAnnotationsCollection(clazz);
         return null;
     }
 

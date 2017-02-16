@@ -29,7 +29,7 @@
 
         <dependency>
             <groupId>org.rouplex</groupId>
-            <artifactId>common</artifactId>
+            <artifactId>commons</artifactId>
             <version>0.0-SNAPSHOT</version>
         </dependency>
     </dependencies>
