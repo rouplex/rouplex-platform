@@ -1,6 +1,7 @@
 package org.rouplex.commons.reflections;
 
 import org.rouplex.commons.Optional;
+import org.rouplex.commons.Predicate;
 import org.rouplex.commons.collections.AbstractIterator;
 import org.rouplex.commons.collections.RouplexCollections;
 
@@ -9,14 +10,82 @@ import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class RouplexReflections {
+    Class<?> clazz;
 
-    public static Method getDeclaredMethod(Class<?> clazz, Method method) {
+    public RouplexReflections(Class<?> clazz) {
+        this.clazz = clazz;
+    }
+
+    protected Iterator<Class<?>> getDeclaredTypesIterator(Predicate<Class<?>> predicate) {
+        return new ClassAndInterfaceIterator(RouplexCollections.<Class<?>> singletonIterator(clazz), predicate);
+    }
+
+    public Collection<Class<?>> getDeclaredTypes(Predicate<Class<?>> predicate) {
+        return RouplexCollections.getCollection(getDeclaredTypesIterator(predicate));
+    }
+
+    public Collection<Class<?>> getDeclaredTypes() {
+        return getDeclaredTypes(null);
+    }
+
+    protected Iterator<Class<?>> getSupperClassesIterator(Predicate<Class<?>> predicate) {
+        return new SuperClassesIterator(clazz, predicate);
+    }
+
+    public Collection<Class<?>> getSupperClasses(Predicate<Class<?>> predicate) {
+        return RouplexCollections.getCollection(getSupperClassesIterator(predicate));
+    }
+
+    public Collection<Class<?>> getSupperClasses() {
+        return getSupperClasses(null);
+    }
+
+    protected Iterator<Class<?>> getSupperTypesIterator(Predicate<Class<?>> predicate) {
+        return new ClassAndInterfaceIterator(getSupperClassesIterator(null), predicate);
+    }
+
+    public Collection<Class<?>> getSupperTypes(Predicate<Class<?>> predicate) {
+        return RouplexCollections.getCollection(getSupperTypesIterator(predicate));
+    }
+
+    public Collection<Class<?>> getSupperTypes() {
+        return getSupperTypes(null);
+    }
+
+    protected Iterator<Annotation> getAnnotationsOfSuperTypesIterator(Predicate<Annotation> predicate) {
+        return new AnnotationsOfSuperTypesIterator(clazz, predicate);
+    }
+
+    public Collection<Annotation> getAnnotationsOfSuperTypes(Predicate<Annotation> predicate) {
+        return RouplexCollections.getCollection(getAnnotationsOfSuperTypesIterator(predicate));
+    }
+
+    public Collection<Annotation> getAnnotationsOfSuperTypes() {
+        return getAnnotationsOfSuperTypes((Predicate<Annotation>) null);
+    }
+
+    public <A extends Annotation> Collection<A> getAnnotationsOfSuperTypes(final Class<A> annotationType) {
+        Iterator<Annotation> iterator = getAnnotationsOfSuperTypesIterator(new Predicate<Annotation>() {
+            @Override
+            public boolean test(Annotation value) {
+                return value.annotationType().equals(annotationType);
+            }
+        });
+
+        return (Collection<A>) RouplexCollections.getCollection(iterator);
+    }
+
+    public <A extends Annotation> Optional<A> getUniqueAnnotationInSuperTypes(Class<A> annotationClass) {
+        Iterator<A> annotationsIterator = getAnnotationsOfSuperTypes(annotationClass).iterator();
+        return annotationsIterator.hasNext() ? Optional.of(annotationsIterator.next()) : Optional.<A> empty();
+    }
+
+    public Method getDeclaredMethod(Method method) {
         try {
             return clazz.getDeclaredMethod(method.getName(), method.getParameterTypes());
         } catch (NoSuchMethodException e) {
@@ -25,43 +94,10 @@ public class RouplexReflections {
         }
     }
 
-    public static Iterator<Class> getIteratorOverSupperClasses(Class clazz) {
-        return new SuperClassesIterator(clazz);
-    }
-
-    public static Collection<Class> getSupperClassesCollection(Class clazz) {
-        return RouplexCollections.getCollection(getIteratorOverSupperClasses(clazz));
-    }
-
-    public static Iterator<Class> getIteratorOverClassHierarchy(Class clazz) {
-        return new ClassHierarchyIterator(getIteratorOverSupperClasses(clazz));
-    }
-
-    public static Collection<Class> getClassHierarchyCollection(Class clazz) {
-        return RouplexCollections.getCollection(getIteratorOverClassHierarchy(clazz));
-    }
-
-    public static Iterator<Annotation> getIteratorOverAllAnnotations(Class clazz) {
-        return new AnnotationIterator(clazz);
-    }
-
-    public static Collection<Annotation> getAllAnnotationsCollection(Class clazz) {
-        return RouplexCollections.getCollection(getIteratorOverAllAnnotations(clazz));
-    }
-
-    public static <A extends Annotation> Iterator<A> getIteratorOverAllAnnotationsOfType(Class<?> clazz, Class<A> annotationClass) {
-        return new AnnotationFilterIterator(getIteratorOverAllAnnotations(clazz), annotationClass);
-    }
-
-    public static <A extends Annotation> Optional<A> getFirstAnnotationOfType(Class<?> clazz, Class<A> annotationClass) {
-        Iterator<A> iteratorOverAllAnnotationsOfType = getIteratorOverAllAnnotationsOfType(clazz, annotationClass);
-        return iteratorOverAllAnnotationsOfType.hasNext() ? Optional.of(iteratorOverAllAnnotationsOfType.next()) : Optional.<A> empty();
-    }
-
-    public static Collection<Method> getPublicAbstractInstanceMethods(Class<?> clazz) {
+    public Collection<Method> getPublicAbstractInstanceMethods() {
         Collection<Method> methods = new ArrayList<Method>();
 
-        for (Class klass : getClassHierarchyCollection(clazz)) {
+        for (Class klass : getSupperTypes()) {
             for (Method method : klass.getDeclaredMethods()) {
                 System.out.println(method.toString());
                 if ((method.getModifiers() & (Modifier.ABSTRACT | Modifier.PUBLIC | Modifier.STATIC)) == (Modifier.PUBLIC | Modifier.ABSTRACT)) {
@@ -90,77 +126,58 @@ public class RouplexReflections {
                 && equalParamTypes(method1.getParameterTypes(), method2.getParameterTypes());
     }
 
-    private abstract static class BaseIterator<T> extends AbstractIterator<T> {
-        protected final AtomicReference<T> nextReference = new AtomicReference<T>();
+    private static class SuperClassesIterator extends AbstractIterator<Class<?>> {
+        private final Class<?> clazz;
 
-        protected abstract void locateNext();
-
-        @Override
-        public boolean hasNext() {
-            return nextReference.get() != null;
-        }
-
-        @Override
-        public T next() {
-            synchronized (nextReference) {
-                T result = nextReference.get();
-                if (result == null) {
-                    throw new NoSuchElementException();
-                }
-
-                locateNext();
-                return result;
-            }
-        }
-    }
-
-    private static class SuperClassesIterator extends BaseIterator<Class> {
-        SuperClassesIterator(Class clazz) {
-            nextReference.set(clazz);
+        SuperClassesIterator(Class<?> clazz, Predicate<Class<?>> predicate) {
+            super(predicate);
+            this.clazz = clazz;
+            locateNextFiltered();
         }
 
         @Override
         protected void locateNext() {
-            nextReference.set(nextReference.get().getSuperclass());
+            next = next == null ? clazz : next.getSuperclass();
         }
     }
 
-    private static class ClassHierarchyIterator extends BaseIterator<Class> {
-        private final Queue<Class> remainingClasses;
-        private final Set<Class> visitedClasses = new HashSet<Class>();
+    private static class ClassAndInterfaceIterator extends AbstractIterator<Class<?>> {
+        private final Queue<Class<?>> remainingClasses;
+        private final Set<Class<?>> visitedClasses = new HashSet<Class<?>>();
 
-        ClassHierarchyIterator(Iterator<Class> superClasses) {
-            remainingClasses = new LinkedList<Class>(RouplexCollections.getCollection(superClasses));
+        ClassAndInterfaceIterator(Iterator<Class<?>> classes, Predicate<Class<?>> predicate) {
+            super(predicate);
+            remainingClasses = new LinkedList<Class<?>>(RouplexCollections.getCollection(classes));
 
-            locateNext();
+            locateNextFiltered();
         }
 
         @Override
         protected void locateNext() {
             while (!remainingClasses.isEmpty()) {
-                Class next = remainingClasses.remove();
+                next = remainingClasses.remove();
 
                 if (visitedClasses.add(next)) {
                     remainingClasses.addAll(Arrays.asList(next.getInterfaces()));
-                    nextReference.set(next);
                     return;
                 }
             }
 
-            nextReference.set(null);
+            next = null;
         }
     }
 
-    private static class AnnotationIterator extends BaseIterator<Annotation> {
-        private final Iterator<Class> classHierarchy;
-        private final AtomicReference<Iterator<Annotation>> currentElementAnnotations = new AtomicReference<Iterator<Annotation>>(AbstractIterator.<Annotation>getEmptyIterator());
+    private static class AnnotationsOfSuperTypesIterator extends AbstractIterator<Annotation> {
         private final Method method;
+        private final Iterator<Class<?>> classHierarchy;
+        private Iterator<Annotation> currentElementAnnotations = RouplexCollections.getEmptyIterator();
 
-        AnnotationIterator(AnnotatedElement annotatedElement) {
-            Class clazz = null;
+        AnnotationsOfSuperTypesIterator(AnnotatedElement annotatedElement, Predicate<Annotation> predicate) {
+            super(predicate);
+            Class<?> clazz = null;
 
-            if (annotatedElement instanceof Class) {
-                clazz = (Class) annotatedElement;
+            if (annotatedElement instanceof Class<?>) {
+                clazz = (Class<?>) annotatedElement;
             }
 
             if (annotatedElement instanceof Method) {
@@ -170,96 +187,24 @@ public class RouplexReflections {
                 method = null;
             }
 
-            classHierarchy = getIteratorOverClassHierarchy(clazz);
-            locateNext();
+            classHierarchy = new RouplexReflections(clazz).getSupperTypesIterator(null);
+            locateNextFiltered();
         }
 
         @Override
         protected void locateNext() {
-            while (!currentElementAnnotations.get().hasNext() && classHierarchy.hasNext()) {
-                Class clazz = classHierarchy.next();
+            while (!currentElementAnnotations.hasNext() && classHierarchy.hasNext()) {
+                Class<?> clazz = classHierarchy.next();
 
                 try {
                     AnnotatedElement annotatedElement = method == null ? clazz : clazz.getDeclaredMethod(method.getName(), method.getParameterTypes());
-                    currentElementAnnotations.set(Arrays.asList(annotatedElement.getAnnotations()).iterator());
+                    currentElementAnnotations = Arrays.asList(annotatedElement.getAnnotations()).iterator();
                 } catch (NoSuchMethodException e) {
                     // it's ok, method not declared in class clazz
                 }
             }
 
-            nextReference.set(currentElementAnnotations.get().hasNext() ? currentElementAnnotations.get().next() : null);
-        }
-    }
-
-    private static class AnnotationFilterIterator<A extends Annotation> extends BaseIterator<A> {
-        private final Iterator<Annotation> annotationIterator;
-        private final Class<A> annotationClass;
-
-        AnnotationFilterIterator(Iterator<Annotation> annotationIterator, Class<A> annotationClass) {
-            this.annotationIterator = annotationIterator;
-            this.annotationClass = annotationClass;
-
-            locateNext();
-        }
-
-        @Override
-        protected void locateNext() {
-            while (annotationIterator.hasNext()) {
-                Annotation annotation = annotationIterator.next();
-                if (annotation.annotationType().equals(annotationClass)) {
-                    nextReference.set((A) annotation);
-                    return;
-                }
-            }
-
-            nextReference.set(null);
+            next = currentElementAnnotations.hasNext() ? currentElementAnnotations.next() : null;
         }
     }
 }
-
-
-//    private static class DeclaredInterfacesIterator extends AbstractIterator<Class> {
-//        Iterator<Class> inner;
-//
-//        DeclaredInterfacesIterator(Class clazz) {
-//            inner = Arrays.asList(clazz.getInterfaces()).iterator();
-//        }
-//
-//        @Override
-//        public boolean hasNext() {
-//            return inner.hasNext();
-//        }
-//
-//        @Override
-//        public Class next() {
-//            return inner.next();
-//        }
-//    }
-//
-//    public static Method locateMostCompatibleMethod(Method method, Collection<Method> methods) {
-//        Method result = null;
-//
-//        for (Method probe : methods) {
-//            if (!method.getReturnType().isAssignableFrom(probe.getReturnType())) {
-//                continue;
-//            }
-//
-//            if (!method.getName().equals(probe.getName())) {
-//                continue;
-//            }
-//
-//            if (method.getParameterTypes().length != probe.getParameterTypes().length) {
-//                continue;
-//            }
-//
-//
-//            for (int index = 0; index < method.getParameterTypes().length; index++) {
-//
-//            }
-//        }
-//
-//        return null;
-//        return method1.getName().equals(method2.getName())
-//                && method1.getReturnType().equals(method2.getReturnType())
-//                && equalParamTypes(method1.getParameterTypes(), method2.getParameterTypes());
-//    }

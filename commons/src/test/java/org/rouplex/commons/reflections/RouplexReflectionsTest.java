@@ -90,13 +90,13 @@ public class RouplexReflectionsTest {
 
     @Test
     public void testGetClassHierarchyCollection() {
-        Collection<Class> classHierarchy = RouplexReflections.getClassHierarchyCollection(Class3.class);
+        Collection<Class<?>> classHierarchy = new RouplexReflections(Class3.class).getSupperTypes();
         Assert.assertEquals(7, classHierarchy.size());
     }
 
     @Test
     public void testGetAnnotationsCollection() {
-        Collection<Annotation> annotations = RouplexReflections.getAllAnnotationsCollection(Class3.class);
+        Collection<Annotation> annotations = new RouplexReflections(Class3.class).getAnnotationsOfSuperTypes();
         for (Annotation a : annotations) {
             System.out.println(a.toString());
         }
@@ -108,7 +108,7 @@ public class RouplexReflectionsTest {
 
     @Test
     public void testGetPublicAbstractInstanceMethods() {
-        Collection<Method> methods = RouplexReflections.getPublicAbstractInstanceMethods(Class3.class);
+        Collection<Method> methods = new RouplexReflections(Class3.class).getPublicAbstractInstanceMethods();
         for (Method method : methods) {
             System.out.println(method.toString());
         }

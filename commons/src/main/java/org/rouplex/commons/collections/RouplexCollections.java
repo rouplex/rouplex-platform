@@ -17,6 +17,39 @@ public class RouplexCollections {
         };
     }
 
+    private static final Iterator emptyIterator = new Iterator() {
+        @Override
+        public boolean hasNext() {
+            return false;
+        }
+
+        @Override
+        public Object next() {
+            return null;
+        }
+    };
+
+    public static <T> Iterator<T> getEmptyIterator() {
+        return emptyIterator;
+    }
+
+    public static <E> Iterator<E> singletonIterator(final E element) {
+        return new Iterator<E>() {
+            boolean hasNext = true;
+
+            @Override
+            public boolean hasNext() {
+                return hasNext;
+            }
+
+            @Override
+            public E next() {
+                hasNext = false;
+                return element;
+            }
+        };
+    }
+
     /**
      * Create a collection and copy the content of the iterator to it before returning it.
      *

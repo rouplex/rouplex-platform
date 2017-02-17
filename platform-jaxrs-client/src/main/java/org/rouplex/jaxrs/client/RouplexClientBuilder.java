@@ -99,11 +99,11 @@ public class RouplexClientBuilder<T> extends ClientBuilder {
 
 
     public <T> T build(Class<T> clazz) {
-        Collection<Class> classes = RouplexReflections.getClassHierarchyCollection(clazz);
+        Collection<Class<?>> classes = new RouplexReflections(clazz).getSupperTypes();
 
         Path path = null;
 
-        for (Annotation classAnnotation : RouplexReflections.getAllAnnotationsCollection(clazz)) {
+        for (Annotation classAnnotation : new RouplexReflections(clazz).getAnnotationsOfSuperTypes()) {
             if (Path.class.isAssignableFrom(classAnnotation.getClass())) {
                 Path probe = (Path) classAnnotation;
                 if (path == null) {
@@ -119,7 +119,7 @@ public class RouplexClientBuilder<T> extends ClientBuilder {
 //        Collection<Method> methods = RouplexReflections.getPublicAbstractInstanceMethods(clazz);
 
 
-        Collection<Annotation> classAnnotations = RouplexReflections.getAllAnnotationsCollection(clazz);
+        Collection<Annotation> classAnnotations = new RouplexReflections(clazz).getAnnotationsOfSuperTypes();
         return null;
     }
 
