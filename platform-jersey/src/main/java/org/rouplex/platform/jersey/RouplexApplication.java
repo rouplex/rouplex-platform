@@ -12,6 +12,7 @@ import org.glassfish.jersey.server.ResourceConfig;
 import org.rouplex.commons.Optional;
 import org.rouplex.commons.Predicate;
 import org.rouplex.commons.reflections.RouplexReflections;
+import org.rouplex.platform.RouplexBinder;
 import org.rouplex.platform.jaxrs.filter.RouplexSecurityContextFilter;
 import org.rouplex.platform.jaxrs.security.RouplexSecurityContext;
 import org.rouplex.platform.jersey.security.RouplexSecurityContextFactory;
