@@ -13,6 +13,7 @@ import org.rouplex.commons.Optional;
 import org.rouplex.commons.Predicate;
 import org.rouplex.commons.reflections.RouplexReflections;
 import org.rouplex.platform.RouplexBinder;
+import org.rouplex.platform.RouplexService;
 import org.rouplex.platform.jaxrs.filter.RouplexSecurityContextFilter;
 import org.rouplex.platform.jaxrs.security.RouplexSecurityContext;
 import org.rouplex.platform.jersey.security.RouplexSecurityContextFactory;
@@ -112,5 +113,15 @@ public class RouplexApplication extends ResourceConfig implements RouplexBinder 
 
             swaggerEnabledResources.addAll(jerseyResources);
         }
+
+        // fish out coordinates of the resource being bound,
+        // create a RouplexService instance,
+        // and register it with the platform
+        bindProvider(new RouplexService());
+    }
+
+    @Override
+    public void bindProvider(RouplexService serviceProvider) {
+
     }
 }
