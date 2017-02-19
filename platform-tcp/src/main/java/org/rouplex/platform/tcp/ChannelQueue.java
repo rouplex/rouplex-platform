@@ -14,7 +14,7 @@ public class ChannelQueue {
         Sync, AsyncSingle, AsyncMultiple
     }
 
-    private final TcpServer tcpServer;
+    private final RouplexTcpServer rouplexTcpServer;
     private final SelectionKey selectionKey;
     private final RequestHandler<byte[], ByteBuffer> requestHandler;
     private final RequestHandlerType requestHandlerType;
@@ -26,16 +26,16 @@ public class ChannelQueue {
     private final LinkedHashSet<Request<byte[]>> requests = new LinkedHashSet<Request<byte[]>>();
     final LinkedHashSet<Reply<ByteBuffer>> replies = new LinkedHashSet<Reply<ByteBuffer>>();
 
-    ChannelQueue(TcpServer tcpServer, SelectionKey selectionKey) {
-        this.tcpServer = tcpServer;
+    ChannelQueue(RouplexTcpServer rouplexTcpServer, SelectionKey selectionKey) {
+        this.rouplexTcpServer = rouplexTcpServer;
         this.selectionKey = selectionKey;
 
-        this.requestHandler = tcpServer.requestHandler; // just a shortcut
+        this.requestHandler = rouplexTcpServer.requestHandler; // just a shortcut
         if (requestHandler instanceof RequestWithSyncReplyHandler) {
             requestHandlerType = RequestHandlerType.Sync;
-        } else if (requestHandler instanceof RequestWithAsyncReply) {
+        } else if (requestHandler instanceof RequestWithAsyncReplyHandler) {
             requestHandlerType = RequestHandlerType.AsyncSingle;
-        } else if (requestHandler instanceof RequestWithMultipleAsyncReplies) {
+        } else if (requestHandler instanceof RequestWithMultipleAsyncRepliesHandler) {
             requestHandlerType = RequestHandlerType.AsyncMultiple;
         } else {
             throw new Error("Implementation error: Unknown requestHandler type: " + requestHandler);
@@ -184,7 +184,7 @@ public class ChannelQueue {
             replies.add(new Reply<ByteBuffer>(reply, System.currentTimeMillis() + replyExpirationMillis));
 
             if (replies.size() == 1) {
-                tcpServer.addPendingWriteRegistration(selectionKey);
+                rouplexTcpServer.addPendingWriteRegistration(selectionKey);
             }
         }
     }

@@ -117,11 +117,11 @@ public class RouplexApplication extends ResourceConfig implements RouplexBinder 
         // fish out coordinates of the resource being bound,
         // create a RouplexService instance,
         // and register it with the platform
-        bindProvider(new RouplexService());
+        bindServiceProvider(new RouplexService(){});
     }
 
     @Override
-    public void bindProvider(RouplexService serviceProvider) {
-
+    public void bindServiceProvider(RouplexService serviceProvider) {
+        // register this with the platform
     }
 }

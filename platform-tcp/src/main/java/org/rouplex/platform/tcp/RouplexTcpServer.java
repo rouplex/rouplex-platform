@@ -1,5 +1,6 @@
 package org.rouplex.platform.tcp;
 
+import org.rouplex.commons.annotations.Nullable;
 import org.rouplex.nio.channels.SSLServerSocketChannel;
 import org.rouplex.nio.channels.spi.SSLSelector;
 import org.rouplex.platform.Reply;
@@ -10,7 +11,9 @@ import org.rouplex.platform.RouplexService;
 import javax.net.ssl.SSLContext;
 import java.io.Closeable;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -24,10 +27,11 @@ import java.util.concurrent.Executors;
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class TcpServer implements RouplexBinder, Closeable {
+public class RouplexTcpServer implements RouplexBinder, Closeable {
 
     protected InetSocketAddress localAddress;
     protected SSLContext sslContext;
+    protected int logback;
 
     protected Selector selector;
     protected ServerSocketChannel serverSocketChannel;
@@ -38,41 +42,87 @@ public class TcpServer implements RouplexBinder, Closeable {
 
     RequestHandler<byte[], ByteBuffer> requestHandler;
 
-//    ConcurrentMap<SocketChannel, ChannelQueue<byte[], byte[]>>
-//            channels = new ConcurrentHashMap<SocketChannel, ChannelQueue<byte[], byte[]>>();
+    protected void checkCanConfigure() {
+        if (selector != null) {
+            throw new IllegalStateException("RouplexTcpServer is already started and cannot change anymore");
+        }
+    }
+
+    protected void checkCanStart() {
+        if (localAddress == null) {
+            throw new IllegalStateException(
+                    "Please define the [localAddress] in order to start the RouplexTcpServer");
+        }
+    }
+
+    public RouplexTcpServer withLocalAddress(InetSocketAddress localAddress) {
+        checkCanConfigure();
+
+        this.localAddress = localAddress;
+        return this;
+    }
+
+    public RouplexTcpServer withLocalAddress(@Nullable String hostname, int port) {
+        checkCanConfigure();
+
+        if (hostname == null || hostname.length() == 0) {
+            try {
+                hostname = InetAddress.getLocalHost().getHostAddress();
+            } catch (UnknownHostException e) {
+                hostname = "localhost";
+            }
+        }
+
+        this.localAddress = new InetSocketAddress(hostname, port);
+        return this;
+    }
+
+    public InetSocketAddress getLocalAddress() {
+        return localAddress;
+    }
+
+    public RouplexTcpServer withSecure(boolean secure, SSLContext sslContext) throws Exception {
+        checkCanConfigure();
+
+        this.sslContext = secure ? sslContext != null ? sslContext :  SSLContext.getDefault() : null;
+        return this;
+    }
+
+    public RouplexTcpServer withLogback(int logback) throws Exception {
+        checkCanConfigure();
+
+        this.logback = logback;
+        return this;
+    }
+
+    public RouplexTcpServer withBoundProvider(RequestHandler<byte[], ByteBuffer> requestHandler) throws Exception {
+        checkCanConfigure();
+
+        this.requestHandler = requestHandler;
+        return this;
+    }
 
     @Override
-    public void bindProvider(RouplexService provider) {
-
+    public void bindServiceProvider(RouplexService provider) {
+        this.requestHandler = (RequestHandler<byte[], ByteBuffer>) provider;
     }
 
-    void addPendingReadRegistration(SelectionKey selectionKey) {
-        synchronized (pendingReadRegistration) {
-            pendingReadRegistration.add(selectionKey);
-        }
-        selector.wakeup();
-    }
+    public RouplexTcpServer start() throws IOException {
+        checkCanStart();
+        checkCanConfigure();
 
-    void addPendingWriteRegistration(SelectionKey selectionKey) {
-        synchronized (pendingWriteRegistration) {
-            pendingWriteRegistration.add(selectionKey);
-        }
-        selector.wakeup();
-    }
-
-    void start() throws IOException {
         selector = sslContext == null ? Selector.open() : SSLSelector.open();
         serverSocketChannel = sslContext == null ? ServerSocketChannel.open() : SSLServerSocketChannel.open(sslContext);
         serverSocketChannel.configureBlocking(false);
         serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
-        serverSocketChannel.bind(localAddress);
+        serverSocketChannel.bind(localAddress, logback);
 
         serverExecutor.submit(new Runnable() {
             @Override
             public void run() {
                 try {
-                    Thread.currentThread().setName("TcpServer");
-                    ByteBuffer byteBuffer = ByteBuffer.allocate(1000000);
+                    Thread.currentThread().setName("RouplexTcpServer");
+                    ByteBuffer readBuffer = ByteBuffer.allocate(1000000);
 
                     while (!serverExecutor.isShutdown()) {
                         selector.selectedKeys().clear();
@@ -91,9 +141,10 @@ public class TcpServer implements RouplexBinder, Closeable {
                                 if (selectionKey.isAcceptable()) {
                                     SocketChannel channel = serverSocketChannel.accept();
                                     channel.configureBlocking(false);
+
 //                                channels.put(channel, new ChannelQueue(channel));
                                     SelectionKey sk = channel.register(selector, SelectionKey.OP_READ);
-                                    sk.attach(new ChannelQueue(TcpServer.this, sk));
+                                    sk.attach(new ChannelQueue(RouplexTcpServer.this, sk));
                                     continue;
                                 }
 
@@ -101,7 +152,7 @@ public class TcpServer implements RouplexBinder, Closeable {
                                 ChannelQueue queue = (ChannelQueue) selectionKey.attachment();
 
                                 if (selectionKey.isReadable()) {
-                                    int read = socketChannel.read(byteBuffer);
+                                    int read = socketChannel.read(readBuffer);
                                     byte[] request;
 
                                     switch (read) {
@@ -113,9 +164,9 @@ public class TcpServer implements RouplexBinder, Closeable {
                                             break;
                                         default:
                                             request = new byte[read];
-                                            byteBuffer.flip();
-                                            byteBuffer.get(request);
-                                            byteBuffer.compact();
+                                            readBuffer.flip();
+                                            readBuffer.get(request);
+                                            readBuffer.compact();
                                     }
 
                                     if (!queue.addRequest(request)) {
@@ -158,6 +209,22 @@ public class TcpServer implements RouplexBinder, Closeable {
                 }
             }
         });
+
+        return this;
+    }
+
+    void addPendingReadRegistration(SelectionKey selectionKey) {
+        synchronized (pendingReadRegistration) {
+            pendingReadRegistration.add(selectionKey);
+        }
+        selector.wakeup();
+    }
+
+    void addPendingWriteRegistration(SelectionKey selectionKey) {
+        synchronized (pendingWriteRegistration) {
+            pendingWriteRegistration.add(selectionKey);
+        }
+        selector.wakeup();
     }
 
     @Override
