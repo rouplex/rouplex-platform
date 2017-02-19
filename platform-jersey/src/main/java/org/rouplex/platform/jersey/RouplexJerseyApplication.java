@@ -34,11 +34,11 @@ import java.util.Set;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class RouplexApplication extends ResourceConfig implements RouplexBinder {
+public class RouplexJerseyApplication extends ResourceConfig implements RouplexBinder {
     private final ServletContext servletContext;
     private final Set<Class<?>> swaggerEnabledResources = new HashSet();
 
-    public RouplexApplication(@Context ServletContext servletContext) {
+    public RouplexJerseyApplication(@Context ServletContext servletContext) {
         this.servletContext = servletContext;
         //RouplexJerseyPlatform.getRouplexJerseyPlatform().registerConnector(); // disco service, metrics, logs etc
     }
