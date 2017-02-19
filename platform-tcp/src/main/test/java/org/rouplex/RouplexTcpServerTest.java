@@ -1,7 +1,6 @@
 package org.rouplex;
 
-import org.rouplex.platform.RequestWithAsyncReply;
-import org.rouplex.platform.RequestWithAsyncReplyHandler;
+import org.rouplex.platform.rr.*;
 import org.rouplex.platform.tcp.RouplexTcpServer;
 
 import java.net.InetSocketAddress;
@@ -16,30 +15,43 @@ import java.util.concurrent.TimeUnit;
  */
 public class RouplexTcpServerTest {
     public static void main(String[] args) throws Exception {
-//        RouplexTcpServer rouplexTcpServer = new RouplexTcpServer()
-//                .withLocalAddress(null, 9999)
-//                .withBoundProvider(new RequestWithSyncReplyHandler<byte[], ByteBuffer>() {
-//                    @Override
-//                    public ByteBuffer handleRequest(byte[] request) {
-//                        return ByteBuffer.wrap(request); // echo
-//                    }
-//                })
-//                .start();
-
-        RouplexTcpServer rouplexTcpServer = new RouplexTcpServer()
-                .withLocalAddress(null, 9999)
-                .withBoundProvider(new RequestWithAsyncReplyHandler<byte[], ByteBuffer>() {
+        RouplexTcpServer rouplexTcpServer1 = new RouplexTcpServer()
+                .withLocalAddress("localhost", 9991)
+                .withServiceProvider(new SyncReplyService<byte[], ByteBuffer>() {
                     @Override
-                    public void handleRequest(RequestWithAsyncReply<byte[], ByteBuffer> requestWithAsyncReply) {
+                    public ByteBuffer serviceRequest(byte[] request) {
+                        return ByteBuffer.wrap(request); // echo
+                    }
+                })
+                .start();
+
+        RouplexTcpServer rouplexTcpServer2 = new RouplexTcpServer()
+                .withLocalAddress("localhost", 9992)
+                .withServiceProvider(new AsyncReplyService<byte[], ByteBuffer>() {
+                    @Override
+                    public void serviceRequest(RequestWithAsyncReply<byte[], ByteBuffer> requestWithAsyncReply) {
                         requestWithAsyncReply.setReply(ByteBuffer.wrap(requestWithAsyncReply.request));
                     }
                 })
                 .start();
 
-        final InetSocketAddress serverAddress = rouplexTcpServer.getLocalAddress();
+        RouplexTcpServer rouplexTcpServer3 = new RouplexTcpServer()
+                .withLocalAddress("localhost", 9993)
+                .withServiceProvider(new AsyncRepliesService<byte[], ByteBuffer>() {
+                    @Override
+                    public void serviceRequest(RequestWithAsyncReplies<byte[], ByteBuffer> request) {
+                        request.addReply(ByteBuffer.wrap(request.request));
+                        request.addReply(ByteBuffer.wrap(request.request));
+                        request.addReply(null);
+                    }
+                })
+                .start();
+        Thread.sleep(100000);
+
+        final InetSocketAddress serverAddress = rouplexTcpServer3.getLocalAddress();
         String hn = serverAddress.getHostName();
 
-        int clientCount = 100;
+        int clientCount = 1;
         ExecutorService executorService = Executors.newFixedThreadPool(clientCount);
 
         final byte[] readBuffer = new byte[1000];

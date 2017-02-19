@@ -1,6 +1,7 @@
 package org.rouplex.platform.tcp;
 
 import org.rouplex.platform.*;
+import org.rouplex.platform.rr.*;
 
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
@@ -10,14 +11,14 @@ import java.util.LinkedHashSet;
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class ChannelQueue {
-    private enum RequestHandlerType {
+    private enum RequestServiceType {
         Sync, AsyncSingle, AsyncMultiple
     }
 
     private final RouplexTcpServer rouplexTcpServer;
     private final SelectionKey selectionKey;
-    private final RequestHandler<byte[], ByteBuffer> requestHandler;
-    private final RequestHandlerType requestHandlerType;
+    private final RouplexService serviceProvider;
+    private final RequestServiceType requestServiceType;
 
     private int maxRequests = Integer.MAX_VALUE;
     private int requestExpirationMillis = Integer.MAX_VALUE;
@@ -30,15 +31,15 @@ public class ChannelQueue {
         this.rouplexTcpServer = rouplexTcpServer;
         this.selectionKey = selectionKey;
 
-        this.requestHandler = rouplexTcpServer.requestHandler; // just a shortcut
-        if (requestHandler instanceof RequestWithSyncReplyHandler) {
-            requestHandlerType = RequestHandlerType.Sync;
-        } else if (requestHandler instanceof RequestWithAsyncReplyHandler) {
-            requestHandlerType = RequestHandlerType.AsyncSingle;
-        } else if (requestHandler instanceof RequestWithMultipleAsyncRepliesHandler) {
-            requestHandlerType = RequestHandlerType.AsyncMultiple;
+        this.serviceProvider = rouplexTcpServer.serviceProvider; // just a shortcut
+        if (serviceProvider instanceof SyncReplyService) {
+            requestServiceType = RequestServiceType.Sync;
+        } else if (serviceProvider instanceof AsyncReplyService) {
+            requestServiceType = RequestServiceType.AsyncSingle;
+        } else if (serviceProvider instanceof AsyncRepliesService) {
+            requestServiceType = RequestServiceType.AsyncMultiple;
         } else {
-            throw new Error("Implementation error: Unknown requestHandler type: " + requestHandler);
+            throw new Error("Implementation error: Unknown serviceProvider type: " + serviceProvider);
         }
     }
 
@@ -94,9 +95,9 @@ public class ChannelQueue {
             }
         }
 
-        switch (requestHandlerType) {
+        switch (requestServiceType) {
             case Sync:
-                reply(((RequestWithSyncReplyHandler<byte[], ByteBuffer>) requestHandler).handleRequest(payload));
+                reply(((SyncReplyService<byte[], ByteBuffer>) serviceProvider).serviceRequest(payload));
                 return true;
             case AsyncSingle:
                 RequestWithAsyncReply<byte[], ByteBuffer> requestWithAsyncReply =
@@ -132,25 +133,24 @@ public class ChannelQueue {
                     }
                 }
 
-                ((RequestWithAsyncReplyHandler<byte[], ByteBuffer>) requestHandler).handleRequest(requestWithAsyncReply);
+                ((AsyncReplyService<byte[], ByteBuffer>) serviceProvider).serviceRequest(requestWithAsyncReply);
                 break;
             case AsyncMultiple:
-                RequestWithMultipleAsyncReplies<byte[], ByteBuffer> requestWithMultipleAsyncReplies =
-                        new RequestWithMultipleAsyncReplies<byte[], ByteBuffer>(
+                RequestWithAsyncReplies<byte[], ByteBuffer> requestWithAsyncReplies =
+                        new RequestWithAsyncReplies<byte[], ByteBuffer>(
                                 cancel ? null : payload, System.currentTimeMillis() + requestExpirationMillis) {
 
                             @Override
                             public boolean addReply(ByteBuffer reply) {
                                 synchronized (requests) {
                                     if (requests.contains(this)) {
-                                        reply(reply);
-
-                                        if (reply == null) {
+                                        if (reply != null) {
+                                            reply(reply);
+                                        } else {
                                             requests.remove(this);
                                         }
                                         return true;
                                     }
-
                                     return false;
                                 }
                             }
@@ -165,14 +165,14 @@ public class ChannelQueue {
                         };
 
                 if (cancel) {
-                    requestWithMultipleAsyncReplies.cancel(1);
+                    requestWithAsyncReplies.cancel(1);
                 } else {
                     synchronized (requests) {
-                        requests.add(requestWithMultipleAsyncReplies);
+                        requests.add(requestWithAsyncReplies);
                     }
                 }
 
-                ((RequestWithMultipleAsyncRepliesHandler<byte[], ByteBuffer>) requestHandler).handleRequest(requestWithMultipleAsyncReplies);
+                ((AsyncRepliesService<byte[], ByteBuffer>) serviceProvider).serviceRequest(requestWithAsyncReplies);
                 break;
         }
 

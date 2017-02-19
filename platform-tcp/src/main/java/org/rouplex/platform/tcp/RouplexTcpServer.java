@@ -3,8 +3,7 @@ package org.rouplex.platform.tcp;
 import org.rouplex.commons.annotations.Nullable;
 import org.rouplex.nio.channels.SSLServerSocketChannel;
 import org.rouplex.nio.channels.spi.SSLSelector;
-import org.rouplex.platform.Reply;
-import org.rouplex.platform.RequestHandler;
+import org.rouplex.platform.rr.Reply;
 import org.rouplex.platform.RouplexBinder;
 import org.rouplex.platform.RouplexService;
 
@@ -40,7 +39,7 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
     Set<SelectionKey> pendingReadRegistration = new HashSet<SelectionKey>();
     Set<SelectionKey> pendingWriteRegistration = new HashSet<SelectionKey>();
 
-    RequestHandler<byte[], ByteBuffer> requestHandler;
+    RouplexService serviceProvider;
 
     protected void checkCanConfigure() {
         if (selector != null) {
@@ -88,23 +87,23 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
         return this;
     }
 
-    public RouplexTcpServer withLogback(int logback) throws Exception {
+    public RouplexTcpServer withLogback(int logback) {
         checkCanConfigure();
 
         this.logback = logback;
         return this;
     }
 
-    public RouplexTcpServer withBoundProvider(RequestHandler<byte[], ByteBuffer> requestHandler) throws Exception {
+    public RouplexTcpServer withServiceProvider(RouplexService serviceProvider) {
         checkCanConfigure();
 
-        this.requestHandler = requestHandler;
+        this.serviceProvider = serviceProvider;
         return this;
     }
 
     @Override
-    public void bindServiceProvider(RouplexService provider) {
-        this.requestHandler = (RequestHandler<byte[], ByteBuffer>) provider;
+    public void bindServiceProvider(RouplexService serviceProvider) {
+        this.serviceProvider = serviceProvider;
     }
 
     public RouplexTcpServer start() throws IOException {
@@ -128,12 +127,20 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
                         selector.selectedKeys().clear();
                         selector.select();
 
-                        for (SelectionKey selectionKey : pendingReadRegistration) {
-                            selectionKey.interestOps(selectionKey.interestOps() | SelectionKey.OP_READ);
+                        synchronized (pendingReadRegistration) {
+                            for (SelectionKey selectionKey : pendingReadRegistration) {
+                                selectionKey.interestOps(selectionKey.interestOps() | SelectionKey.OP_READ);
+                            }
+
+                            pendingReadRegistration.clear();
                         }
 
-                        for (SelectionKey selectionKey : pendingWriteRegistration) {
-                            selectionKey.interestOps(selectionKey.interestOps() | SelectionKey.OP_WRITE);
+                        synchronized (pendingWriteRegistration) {
+                            for (SelectionKey selectionKey : pendingWriteRegistration) {
+                                selectionKey.interestOps(selectionKey.interestOps() | SelectionKey.OP_WRITE);
+                            }
+
+                            pendingWriteRegistration.clear();
                         }
 
                         for (SelectionKey selectionKey : selector.selectedKeys()) {
@@ -141,8 +148,6 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
                                 if (selectionKey.isAcceptable()) {
                                     SocketChannel channel = serverSocketChannel.accept();
                                     channel.configureBlocking(false);
-
-//                                channels.put(channel, new ChannelQueue(channel));
                                     SelectionKey sk = channel.register(selector, SelectionKey.OP_READ);
                                     sk.attach(new ChannelQueue(RouplexTcpServer.this, sk));
                                     continue;
@@ -178,7 +183,7 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
                                     while (true) {
                                         Reply<ByteBuffer> reply = queue.pollFirstReply();
 
-                                        if (reply == null) {
+                                        if (reply == null) { // nothing in the queue
                                             selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_WRITE);
                                             break;
                                         }

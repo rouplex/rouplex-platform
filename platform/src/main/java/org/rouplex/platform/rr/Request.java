@@ -1,4 +1,4 @@
-package org.rouplex.platform;
+package org.rouplex.platform.rr;
 
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
