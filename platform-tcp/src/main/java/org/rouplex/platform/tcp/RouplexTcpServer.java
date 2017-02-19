@@ -281,7 +281,7 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
             }
 
             socketChannels = null;
-            if (pendingException == null) {
+            if (pendingException != null) {
                 throw pendingException;
             }
         }
