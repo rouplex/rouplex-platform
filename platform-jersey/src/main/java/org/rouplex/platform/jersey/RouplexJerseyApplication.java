@@ -120,6 +120,12 @@ public class RouplexJerseyApplication extends ResourceConfig implements RouplexB
         bindServiceProvider(new RouplexService(){});
     }
 
+// todo: Not a big deal but curious why does not the instance get registered as the class does.
+//  public void bindResource(Object object, boolean enableSwagger) {
+//        register(object);
+//        ...
+//  }
+
     @Override
     public void bindServiceProvider(RouplexService serviceProvider) {
         // register this with the platform

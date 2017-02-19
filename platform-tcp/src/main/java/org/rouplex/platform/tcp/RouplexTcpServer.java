@@ -3,9 +3,9 @@ package org.rouplex.platform.tcp;
 import org.rouplex.commons.annotations.Nullable;
 import org.rouplex.nio.channels.SSLServerSocketChannel;
 import org.rouplex.nio.channels.spi.SSLSelector;
-import org.rouplex.platform.rr.Reply;
 import org.rouplex.platform.RouplexBinder;
 import org.rouplex.platform.RouplexService;
+import org.rouplex.platform.rr.Reply;
 
 import javax.net.ssl.SSLContext;
 import java.io.Closeable;
@@ -34,10 +34,13 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
 
     protected Selector selector;
     protected ServerSocketChannel serverSocketChannel;
-    protected ExecutorService serverExecutor = Executors.newSingleThreadExecutor();
+    protected final ExecutorService serverExecutor = Executors.newSingleThreadExecutor();
 
-    Set<SelectionKey> pendingReadRegistration = new HashSet<SelectionKey>();
-    Set<SelectionKey> pendingWriteRegistration = new HashSet<SelectionKey>();
+    protected final Set<SelectionKey> pendingReadRegistration = new HashSet<SelectionKey>();
+    protected final Set<SelectionKey> pendingWriteRegistration = new HashSet<SelectionKey>();
+
+    // if null the server is closed
+    protected Set<SocketChannel> socketChannels = new HashSet<SocketChannel>();
 
     RouplexService serviceProvider;
 
@@ -148,8 +151,11 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
                                 if (selectionKey.isAcceptable()) {
                                     SocketChannel channel = serverSocketChannel.accept();
                                     channel.configureBlocking(false);
+
                                     SelectionKey sk = channel.register(selector, SelectionKey.OP_READ);
                                     sk.attach(new ChannelQueue(RouplexTcpServer.this, sk));
+
+                                    addSocketChannel(channel);
                                     continue;
                                 }
 
@@ -218,6 +224,14 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
         return this;
     }
 
+    private void addSocketChannel(SocketChannel socketChannel) {
+        synchronized (serverExecutor) {
+            if (socketChannels != null) {
+                socketChannels.add(socketChannel);
+            }
+        }
+    }
+
     void addPendingReadRegistration(SelectionKey selectionKey) {
         synchronized (pendingReadRegistration) {
             pendingReadRegistration.add(selectionKey);
@@ -234,18 +248,42 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
 
     @Override
     public void close() throws IOException {
-        serverExecutor.shutdownNow();
+        synchronized (serverExecutor) {
+            if (socketChannels == null) {
+                return; // already closed
+            }
 
-        try {
-            selector.close();
-        } catch (IOException ioe) {
-            //
-        }
+            IOException pendingException = null;
+            serverExecutor.shutdownNow();
 
-        try {
-            serverSocketChannel.close();
-        } catch (IOException ioe) {
-            //
+            try {
+                selector.close();
+            } catch (IOException ioe) {
+                pendingException = ioe;
+            }
+
+            try {
+                serverSocketChannel.close();
+            } catch (IOException ioe) {
+                if (pendingException == null) {
+                    pendingException = ioe;
+                }
+            }
+
+            for (SocketChannel socketChannel : socketChannels) {
+                try {
+                    socketChannel.close();
+                } catch (IOException ioe) {
+                    if (pendingException == null) {
+                        pendingException = ioe;
+                    }
+                }
+            }
+
+            socketChannels = null;
+            if (pendingException == null) {
+                throw pendingException;
+            }
         }
     }
 }
