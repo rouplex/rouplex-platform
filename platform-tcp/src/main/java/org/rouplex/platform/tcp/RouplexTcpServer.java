@@ -28,21 +28,18 @@ import java.util.concurrent.Executors;
  */
 public class RouplexTcpServer implements RouplexBinder, Closeable {
 
+    protected RouplexService serviceProvider;
+    protected ExecutorService executorService;
     protected InetSocketAddress localAddress;
     protected SSLContext sslContext;
     protected int logback;
 
-    protected Selector selector;
-    protected ServerSocketChannel serverSocketChannel;
-    protected final ExecutorService serverExecutor = Executors.newSingleThreadExecutor();
+    protected Selector selector; // if null the server is not started
+    protected ServerSocketChannel serverSocketChannel; // if null the server is closed
 
     protected final Set<SelectionKey> pendingReadRegistration = new HashSet<SelectionKey>();
     protected final Set<SelectionKey> pendingWriteRegistration = new HashSet<SelectionKey>();
-
-    // if null the server is closed
-    protected Set<SocketChannel> socketChannels = new HashSet<SocketChannel>();
-
-    RouplexService serviceProvider;
+    protected final Set<SocketChannel> socketChannels = new HashSet<SocketChannel>();
 
     protected void checkCanConfigure() {
         if (selector != null) {
@@ -55,6 +52,13 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
             throw new IllegalStateException(
                     "Please define the [localAddress] in order to start the RouplexTcpServer");
         }
+    }
+
+    public RouplexTcpServer withExecutorService(ExecutorService executorService) {
+        checkCanConfigure();
+
+        this.executorService = executorService;
+        return this;
     }
 
     public RouplexTcpServer withLocalAddress(InetSocketAddress localAddress) {
@@ -109,6 +113,8 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
         this.serviceProvider = serviceProvider;
     }
 
+    Thread executorThread;
+
     public RouplexTcpServer start() throws IOException {
         checkCanStart();
         checkCanConfigure();
@@ -119,14 +125,16 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
         serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
         serverSocketChannel.bind(localAddress, logback);
 
-        serverExecutor.submit(new Runnable() {
+        final ExecutorService es = executorService != null ? executorService : Executors.newFixedThreadPool(1);
+        es.submit(new Runnable() {
             @Override
             public void run() {
                 try {
-                    Thread.currentThread().setName("RouplexTcpServer");
+                    Thread currentThread = Thread.currentThread();
+                    currentThread.setName("RouplexTcpServer");
                     ByteBuffer readBuffer = ByteBuffer.allocate(1000000);
 
-                    while (!serverExecutor.isShutdown()) {
+                    while (serverSocketChannel != null && !es.isShutdown() && !currentThread.isInterrupted()) {
                         selector.selectedKeys().clear();
                         selector.select();
 
@@ -211,12 +219,16 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
                     }
                 } catch (Exception e) {
                     //logger.info("Server finished accepting new connections. Cause: " + e.getMessage());
-                }
 
-                try {
-                    close();
-                } catch (IOException e2) {
-                    //logger.info("Failed stopping server. Cause: " + e2.getMessage());
+                    if (executorService == null) { // only if the executor is owned by this instance shut it down
+                        es.shutdownNow();
+                    }
+
+                    try {
+                        close();
+                    } catch (IOException e2) {
+                        //logger.info("Failed stopping server. Cause: " + e2.getMessage());
+                    }
                 }
             }
         });
@@ -225,8 +237,8 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
     }
 
     private void addSocketChannel(SocketChannel socketChannel) {
-        synchronized (serverExecutor) {
-            if (socketChannels != null) {
+        synchronized (socketChannels) {
+            if (serverSocketChannel != null) {
                 socketChannels.add(socketChannel);
             }
         }
@@ -248,22 +260,24 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
 
     @Override
     public void close() throws IOException {
-        synchronized (serverExecutor) {
-            if (socketChannels == null) {
+        synchronized (socketChannels) {
+            if (serverSocketChannel == null) {
                 return; // already closed
             }
 
             IOException pendingException = null;
-            serverExecutor.shutdownNow();
 
             try {
-                selector.close();
+                serverSocketChannel.close();
             } catch (IOException ioe) {
                 pendingException = ioe;
             }
 
+            serverSocketChannel = null;
+            selector.wakeup();
+
             try {
-                serverSocketChannel.close();
+                selector.close();
             } catch (IOException ioe) {
                 if (pendingException == null) {
                     pendingException = ioe;
@@ -280,7 +294,6 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
                 }
             }
 
-            socketChannels = null;
             if (pendingException != null) {
                 throw pendingException;
             }
