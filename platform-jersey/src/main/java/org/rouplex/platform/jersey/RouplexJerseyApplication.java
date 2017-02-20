@@ -23,6 +23,8 @@ import javax.servlet.ServletContext;
 import javax.ws.rs.ApplicationPath;
 import javax.ws.rs.Path;
 import javax.ws.rs.core.Context;
+import javax.ws.rs.core.Response;
+import javax.ws.rs.ext.ExceptionMapper;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
@@ -47,6 +49,7 @@ public class RouplexJerseyApplication extends ResourceConfig implements RouplexB
     void init() {
         initSecurity();
         initJacksonJaxbJsonProvider();
+        initExceptionMapper();
         initSwagger();
     }
 
@@ -95,7 +98,18 @@ public class RouplexJerseyApplication extends ResourceConfig implements RouplexB
         }
     }
 
-    public void bindResource(Class<?> clazz, boolean enableSwagger) {
+    protected void initExceptionMapper() {
+        register(new ExceptionMapper<Exception>() {
+            @Override
+            public Response toResponse(Exception e) {
+                return Response.status(Response.Status.UNAUTHORIZED)
+                        .entity("Service Exception. Class [" + e.getClass() + "], Message [" + e.getMessage() + "]")
+                        .build();
+            }
+        });
+    }
+
+    public void bindRouplexResource(Class<?> clazz, boolean enableSwagger) {
         register(clazz);
 
         if (enableSwagger) {
@@ -117,7 +131,8 @@ public class RouplexJerseyApplication extends ResourceConfig implements RouplexB
         // fish out coordinates of the resource being bound,
         // create a RouplexService instance,
         // and register it with the platform
-        bindServiceProvider(new RouplexService(){});
+        bindServiceProvider(new RouplexService() {
+        });
     }
 
 // todo: Not a big deal but curious why does not the instance get registered as the class does.
