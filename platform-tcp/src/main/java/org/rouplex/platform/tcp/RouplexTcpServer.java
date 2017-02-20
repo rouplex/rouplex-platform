@@ -5,7 +5,10 @@ import org.rouplex.nio.channels.SSLServerSocketChannel;
 import org.rouplex.nio.channels.spi.SSLSelector;
 import org.rouplex.platform.RouplexBinder;
 import org.rouplex.platform.RouplexService;
+import org.rouplex.platform.rr.AsyncRepliesService;
+import org.rouplex.platform.rr.AsyncReplyService;
 import org.rouplex.platform.rr.Reply;
+import org.rouplex.platform.rr.SyncReplyService;
 
 import javax.net.ssl.SSLContext;
 import java.io.Closeable;
@@ -101,7 +104,21 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
         return this;
     }
 
-    public RouplexTcpServer withServiceProvider(RouplexService serviceProvider) {
+    public RouplexTcpServer withServiceProvider(SyncReplyService<byte[], ByteBuffer> serviceProvider) {
+        checkCanConfigure();
+
+        this.serviceProvider = serviceProvider;
+        return this;
+    }
+
+    public RouplexTcpServer withServiceProvider(AsyncReplyService<byte[], ByteBuffer> serviceProvider) {
+        checkCanConfigure();
+
+        this.serviceProvider = serviceProvider;
+        return this;
+    }
+
+    public RouplexTcpServer withServiceProvider(AsyncRepliesService<byte[], ByteBuffer> serviceProvider) {
         checkCanConfigure();
 
         this.serviceProvider = serviceProvider;
@@ -112,8 +129,6 @@ public class RouplexTcpServer implements RouplexBinder, Closeable {
     public void bindServiceProvider(RouplexService serviceProvider) {
         this.serviceProvider = serviceProvider;
     }
-
-    Thread executorThread;
 
     public RouplexTcpServer start() throws IOException {
         checkCanStart();
