@@ -102,8 +102,8 @@ public class RouplexJerseyApplication extends ResourceConfig implements RouplexB
         register(new ExceptionMapper<Exception>() {
             @Override
             public Response toResponse(Exception e) {
-                return Response.status(Response.Status.UNAUTHORIZED)
-                        .entity("Service Exception. Class [" + e.getClass() + "], Message [" + e.getMessage() + "]")
+                return Response.status(500).entity(String.format(
+                        "{\"exceptionClass\": \"%s\", \"exceptionMessage\": \"%s\"}", e.getClass(), e.getMessage()))
                         .build();
             }
         });
