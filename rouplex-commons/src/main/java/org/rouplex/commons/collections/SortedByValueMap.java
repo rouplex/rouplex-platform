@@ -1,35 +1,38 @@
 package org.rouplex.commons.collections;
 
+import org.rouplex.commons.annotations.NotThreadSafe;
+
 import java.util.*;
 
 /**
+ * A map like structure (which can be made to implement Map) providing an iterator over its entries sorted by value.
+ * This implementation is not thread safe. Please check {@link org.rouplex.commons.concurrency.Synchronized}
+ * synchronized (sine in the common use case we expect the synchronization to
+ *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
+@NotThreadSafe
 public class SortedByValueMap<K, V> {
     private final Map<K, V> keyValue = new HashMap<K, V>();
     private final SortedMap<V, Set<K>> orderedByValue = new TreeMap<V, Set<K>>();
 
     public V put(K key, V value) {
-        synchronized (orderedByValue) {
-            V oldValue = removeOldValue(key, keyValue.put(key, value));
+        V oldValue = removeOldValue(key, keyValue.put(key, value));
 
-            Set<K> keysForValue = orderedByValue.get(value);
-            if (keysForValue == null) {
-                orderedByValue.put(value, keysForValue = new HashSet<K>());
-            }
-            keysForValue.add(key);
-
-            return oldValue;
+        Set<K> keysForValue = orderedByValue.get(value);
+        if (keysForValue == null) {
+            orderedByValue.put(value, keysForValue = new HashSet<K>());
         }
+        keysForValue.add(key);
+
+        return oldValue;
     }
 
     public V remove(K key) {
-        synchronized (orderedByValue) {
-            return removeOldValue(key, keyValue.remove(key));
-        }
+        return removeOldValue(key, keyValue.remove(key));
     }
 
-    public Iterable<Map.Entry<K,V>> sortedByValue() {
+    public Iterable<Map.Entry<K, V>> sortedByValue() {
         return new Iterable<Map.Entry<K, V>>() {
             @Override
             public Iterator<Map.Entry<K, V>> iterator() {

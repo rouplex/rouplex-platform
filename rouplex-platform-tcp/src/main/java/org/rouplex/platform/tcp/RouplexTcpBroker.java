@@ -91,13 +91,17 @@ public class RouplexTcpBroker implements Closeable {
 
     private long updateInterestOpsAndCalculateSelectTimeout() {
         for (Map.Entry<SelectionKey, Integer> addingInterestOp : addingInterestOps.entrySet()) {
-            addingInterestOp.getKey().interestOps(
-                    addingInterestOp.getKey().interestOps() | addingInterestOp.getValue());
+            SelectionKey selectionKey = addingInterestOp.getKey();
+            if (selectionKey.isValid()) { // channel may have closed during the preceding loop
+                selectionKey.interestOps(selectionKey.interestOps() | addingInterestOp.getValue());
+            }
         }
 
         for (Map.Entry<SelectionKey, Integer> removingInterestOp : removingInterestOps.entrySet()) {
-            removingInterestOp.getKey().interestOps(
-                    removingInterestOp.getKey().interestOps() & ~removingInterestOp.getValue());
+            SelectionKey selectionKey = removingInterestOp.getKey();// channel may have closed during the preceding loop
+            if (selectionKey.isValid()) { // channel may have closed during the preceding loop
+                selectionKey.interestOps(selectionKey.interestOps() & ~removingInterestOp.getValue());
+            }
         }
 
         addingInterestOps.clear();
@@ -113,9 +117,15 @@ public class RouplexTcpBroker implements Closeable {
     private long calculateNextSelectTimeout(SortedByValueMap<SelectionKey, Long> resumingSelectors, long now, int op) {
         long selectTimeout = 0;
         for (Map.Entry<SelectionKey, Long> resumingOp : resumingSelectors.sortedByValue()) {
+            SelectionKey selectionKey = resumingOp.getKey();// channel may have closed during the preceding loop
+            if (!selectionKey.isValid()) {
+                resumingSelectors.remove(selectionKey);
+                continue;
+            }
+
             if (resumingOp.getValue() <= now) {
-                resumingOp.getKey().interestOps(resumingOp.getKey().interestOps() | op);
-                resumingSelectors.remove(resumingOp.getKey());
+                selectionKey.interestOps(selectionKey.interestOps() | op);
+                resumingSelectors.remove(selectionKey);
             } else {
                 selectTimeout = resumingOp.getValue() - now;
                 break;
