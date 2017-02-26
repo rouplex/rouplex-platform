@@ -25,7 +25,7 @@ public class RouplexTcpServerTest {
                 .withLocalAddress("localhost", 9991)
                 .build();
 
-        rouplexTcpServer1.getRouplexTcpBroker().setTcpClientAddedListener(new EventListener<RouplexTcpClient>() {
+        rouplexTcpServer1.getRouplexTcpBinder().setTcpClientAddedListener(new EventListener<RouplexTcpClient>() {
 
             @Override
             public void onEvent(final RouplexTcpClient addedRouplexTcpClient) {

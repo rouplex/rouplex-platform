@@ -23,20 +23,20 @@ class RouplexTcpChannel implements Closeable {
     @Final
     protected SocketAddress localAddress;
     @Final
-    protected RouplexTcpBroker rouplexTcpBroker;
+    protected RouplexTcpBinder rouplexTcpBinder;
     @Final
     protected SSLContext sslContext;
     @Final
-    protected boolean sharedRouplexBroker;
+    protected boolean sharedRouplexBinder;
     @Final // set in build() if not set
     protected SelectableChannel selectableChannel;
-    // not final, it is set from broker
+    // not final, it is set from binder
     protected SelectionKey selectionKey;
 
-    RouplexTcpChannel(SelectableChannel selectableChannel, RouplexTcpBroker rouplexTcpBroker) {
+    RouplexTcpChannel(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder) {
         this.selectableChannel = selectableChannel;
-        this.rouplexTcpBroker = rouplexTcpBroker;
-        sharedRouplexBroker = rouplexTcpBroker != null;
+        this.rouplexTcpBinder = rouplexTcpBinder;
+        sharedRouplexBinder = rouplexTcpBinder != null;
     }
 
     static abstract class Builder<T extends RouplexTcpChannel, B extends Builder> {
@@ -56,11 +56,11 @@ class RouplexTcpChannel implements Closeable {
             }
         }
 
-        public B withRouplexBroker(RouplexTcpBroker rouplexTcpBroker) {
+        public B withRouplexTcpBinder(RouplexTcpBinder rouplexTcpBinder) {
             checkNotBuilt();
 
-            instance.rouplexTcpBroker = rouplexTcpBroker;
-            instance.sharedRouplexBroker = rouplexTcpBroker != null;
+            instance.rouplexTcpBinder = rouplexTcpBinder;
+            instance.sharedRouplexBinder = rouplexTcpBinder != null;
             return builder;
         }
 
@@ -94,8 +94,8 @@ class RouplexTcpChannel implements Closeable {
         }
     }
 
-    public RouplexTcpBroker getRouplexTcpBroker() {
-        return rouplexTcpBroker;
+    public RouplexTcpBinder getRouplexTcpBinder() {
+        return rouplexTcpBinder;
     }
 
     public SocketAddress getLocalAddress() throws IOException {
@@ -123,8 +123,8 @@ class RouplexTcpChannel implements Closeable {
                 return;
             }
 
-            if (!sharedRouplexBroker && rouplexTcpBroker != null) {
-                rouplexTcpBroker.close();
+            if (!sharedRouplexBinder && rouplexTcpBinder != null) {
+                rouplexTcpBinder.close();
             }
 
             selectableChannel.close();

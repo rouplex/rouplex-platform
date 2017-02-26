@@ -50,14 +50,14 @@ public class RouplexTcpServer extends RouplexTcpChannel {
     }
 
     private RouplexTcpServer start() throws IOException {
-        if (rouplexTcpBroker == null) {
-            rouplexTcpBroker = new RouplexTcpBroker(sslContext == null ? Selector.open() : SSLSelector.open(), null);
+        if (rouplexTcpBinder == null) {
+            rouplexTcpBinder = new RouplexTcpBinder(sslContext == null ? Selector.open() : SSLSelector.open(), null);
         }
 
         ServerSocketChannel serverSocketChannel = sslContext == null ? ServerSocketChannel.open() : SSLServerSocketChannel.open(sslContext);
         serverSocketChannel.bind(localAddress, backlog);
         selectableChannel = serverSocketChannel;
-        rouplexTcpBroker.addRouplexChannel(this);
+        rouplexTcpBinder.addRouplexChannel(this);
 
         return this;
     }

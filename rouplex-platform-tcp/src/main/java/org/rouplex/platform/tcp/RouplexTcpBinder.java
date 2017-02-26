@@ -19,7 +19,7 @@ import java.util.concurrent.Executors;
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class RouplexTcpBroker implements Closeable {
+public class RouplexTcpBinder implements Closeable {
     protected final Object lock = new Object();
 
     protected final Selector selector;
@@ -36,11 +36,11 @@ public class RouplexTcpBroker implements Closeable {
     protected EventListener<RouplexTcpClient> tcpClientAddedListener;
     private boolean isClosing;
 
-    public RouplexTcpBroker(Selector selector) {
+    public RouplexTcpBinder(Selector selector) {
         this(selector, null);
     }
 
-    public RouplexTcpBroker(Selector selector, ExecutorService executorService) {
+    public RouplexTcpBinder(Selector selector, ExecutorService executorService) {
         this.selector = selector; // this will be a little trickier with ssl, punting for now
         this.executorService = (sharedExecutorService = executorService != null)
                 ? executorService : Executors.newSingleThreadExecutor();
@@ -144,7 +144,7 @@ public class RouplexTcpBroker implements Closeable {
             @Override
             public void run() {
                 Thread currentThread = Thread.currentThread();
-                currentThread.setName("RouplexTcpBroker");
+                currentThread.setName("RouplexTcpBinder");
                 ByteBuffer readBuffer = ByteBuffer.allocate(1000000);
 
                 try {
@@ -183,7 +183,7 @@ public class RouplexTcpBroker implements Closeable {
                             try {
                                 if (selectionKey.isAcceptable()) {
                                     SocketChannel socketChannel = ((ServerSocketChannel) selectionKey.channel()).accept();
-                                    addRouplexChannel(new RouplexTcpClient(socketChannel, RouplexTcpBroker.this));
+                                    addRouplexChannel(new RouplexTcpClient(socketChannel, RouplexTcpBinder.this));
                                     continue;
                                 }
 
@@ -253,7 +253,7 @@ public class RouplexTcpBroker implements Closeable {
                         }
                     }
                 } catch (Exception ioe) {
-                    // something major, close the broker
+                    // something major, close the binder
                 }
 
                 syncClose(); // close synchronously.

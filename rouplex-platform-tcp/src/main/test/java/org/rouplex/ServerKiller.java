@@ -5,7 +5,7 @@ package org.rouplex;
  */
 
 import org.rouplex.platform.rr.EventListener;
-import org.rouplex.platform.tcp.RouplexTcpBroker;
+import org.rouplex.platform.tcp.RouplexTcpBinder;
 import org.rouplex.platform.tcp.RouplexTcpClient;
 
 import java.io.IOException;
@@ -13,12 +13,12 @@ import java.nio.channels.Selector;
 
 public class ServerKiller {
     public static void main(String args[]) throws Exception {
-        RouplexTcpBroker rouplexBroker = null;
+        RouplexTcpBinder rouplexBinder = null;
         RouplexTcpClient rouplexTcpClient = null;
 
         try {
-            rouplexBroker = new RouplexTcpBroker(Selector.open(), null);
-            rouplexBroker.setTcpClientAddedListener(new EventListener<RouplexTcpClient>() {
+            rouplexBinder = new RouplexTcpBinder(Selector.open(), null);
+            rouplexBinder.setTcpClientAddedListener(new EventListener<RouplexTcpClient>() {
                 @Override
                 public void onEvent(RouplexTcpClient rouplexTcpClient) {
                     rouplexTcpClient.hookSendChannel(null).send(null); // send EOS
@@ -26,7 +26,7 @@ public class ServerKiller {
             });
 
             rouplexTcpClient = RouplexTcpClient.newBuilder()
-                    .withRouplexBroker(rouplexBroker)
+                    .withRouplexTcpBinder(rouplexBinder)
                     .withRemoteAddress("10.0.0.159", 9999)
                     .build();
         } finally {
@@ -37,8 +37,8 @@ public class ServerKiller {
                 }
             }
 
-            if (rouplexBroker != null) {
-                rouplexBroker.close();
+            if (rouplexBinder != null) {
+                rouplexBinder.close();
             }
         }
     }

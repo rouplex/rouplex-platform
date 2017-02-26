@@ -16,7 +16,6 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.util.LinkedList;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -84,7 +83,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
 
         @Override
         public boolean pause() {
-            rouplexTcpBroker.pauseRead(selectionKey, Long.MAX_VALUE); // 295 million years
+            rouplexTcpBinder.pauseRead(selectionKey, Long.MAX_VALUE); // 295 million years
             return true;
         }
 
@@ -103,8 +102,8 @@ public class RouplexTcpClient extends RouplexTcpChannel {
                 }
             }
 
-            // No worries here since spurious pauseReads collapse and get handled as one by the rouplexTcpBroker thread
-            rouplexTcpBroker.pauseRead(selectionKey, 0);
+            // No worries here since spurious pauseReads collapse and get handled as one by the rouplexTcpBinder thread
+            rouplexTcpBinder.pauseRead(selectionKey, 0);
         }
 
         boolean consumeSocketInput(byte[] payload) {
@@ -115,7 +114,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
                 } else {
                     rateLimitCurrentBytes += payload == null ? 0 : payload.length;
                     if (rateLimitCurrentBytes > rateLimitBytes) {
-                        rouplexTcpBroker.pauseRead(selectionKey, rateLimitCurrentTimestamp);
+                        rouplexTcpBinder.pauseRead(selectionKey, rateLimitCurrentTimestamp);
                     }
                 }
             }
@@ -177,7 +176,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
             ByteBuffer writeBuffer;
             if (writeSize > 0) {
                 // potentially costly operations in this block so we must perform outside the lock space especially
-                // since the removeWriteBuffer is performed from the RouplexTcpBroker's single thread responsible to go
+                // since the removeWriteBuffer is performed from the RouplexTcpBinder's single thread responsible to go
                 // over all the channels monitored!!!
                 writeBuffer = ByteBuffer.allocate(writeSize);
                 transfer(payload, writeBuffer);
@@ -199,7 +198,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
                     writeBuffers.add(writeBuffer);
                 }
 
-                rouplexTcpBroker.addInterestOps(selectionKey, SelectionKey.OP_WRITE);
+                rouplexTcpBinder.addInterestOps(selectionKey, SelectionKey.OP_WRITE);
             }
 
             return !paused;
@@ -233,13 +232,13 @@ public class RouplexTcpClient extends RouplexTcpChannel {
     final ThrottledSender throttledSender = new ThrottledSender();
     final ThrottledReceiver throttledReceiver = new ThrottledReceiver();
 
-    RouplexTcpClient(SelectableChannel selectableChannel, RouplexTcpBroker rouplexTcpBroker) {
-        super(selectableChannel, rouplexTcpBroker);
+    RouplexTcpClient(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder) {
+        super(selectableChannel, rouplexTcpBinder);
     }
 
     private RouplexTcpClient connect() throws IOException {
-        if (rouplexTcpBroker == null) {
-            rouplexTcpBroker = new RouplexTcpBroker(sslContext == null ? Selector.open() : SSLSelector.open(), null);
+        if (rouplexTcpBinder == null) {
+            rouplexTcpBinder = new RouplexTcpBinder(sslContext == null ? Selector.open() : SSLSelector.open(), null);
         }
 
         if (selectableChannel == null) {
@@ -247,7 +246,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
                     ? SocketChannel.open(remoteAddress) : SSLSocketChannel.open(remoteAddress, sslContext);
         }
 
-        rouplexTcpBroker.addRouplexChannel(this);
+        rouplexTcpBinder.addRouplexChannel(this);
         return this;
     }
 

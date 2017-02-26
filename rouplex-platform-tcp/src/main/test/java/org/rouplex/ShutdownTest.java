@@ -2,7 +2,7 @@ package org.rouplex;
 
 import org.junit.Assert;
 import org.junit.Test;
-import org.rouplex.platform.tcp.RouplexTcpBroker;
+import org.rouplex.platform.tcp.RouplexTcpBinder;
 import org.rouplex.platform.tcp.RouplexTcpServer;
 
 import java.nio.channels.Selector;
@@ -14,45 +14,45 @@ import java.util.concurrent.Executors;
 public class ShutdownTest {
 
     @Test
-    public void testBrokerWithNullExecutorShutdown() throws Exception {
-        new RouplexTcpBroker(Selector.open(), null).close();
+    public void testBinderWithNullExecutorShutdown() throws Exception {
+        new RouplexTcpBinder(Selector.open(), null).close();
     }
 
     @Test
-    public void testBrokerWithSharedExecutorShutdown() throws Exception {
-        new RouplexTcpBroker(Selector.open(), Executors.newSingleThreadExecutor()).close();
+    public void testBinderWithSharedExecutorShutdown() throws Exception {
+        new RouplexTcpBinder(Selector.open(), Executors.newSingleThreadExecutor()).close();
     }
 
     @Test
-    public void testServerWithNoBrokerShutdown() throws Exception {
+    public void testServerWithNoBinderShutdown() throws Exception {
         RouplexTcpServer.newBuilder().withLocalAddress(null, 9999).build().close();
     }
 
     @Test
-    public void testServerWithNullBrokerShutdown() throws Exception {
-        RouplexTcpServer.newBuilder().withRouplexBroker(null).withLocalAddress(null, 0).build().close();
+    public void testServerWithNullBinderShutdown() throws Exception {
+        RouplexTcpServer.newBuilder().withRouplexTcpBinder(null).withLocalAddress(null, 0).build().close();
     }
 
     @Test
-    public void testServerWithSharedBrokerWithExecutorShutdown() throws Exception {
-        RouplexTcpBroker rouplexBroker = new RouplexTcpBroker(Selector.open(), Executors.newSingleThreadExecutor());
-        RouplexTcpServer.newBuilder().withRouplexBroker(rouplexBroker).withLocalAddress(null, 0).build().close();
-        rouplexBroker.close();
+    public void testServerWithSharedBinderWithExecutorShutdown() throws Exception {
+        RouplexTcpBinder rouplexBinder = new RouplexTcpBinder(Selector.open(), Executors.newSingleThreadExecutor());
+        RouplexTcpServer.newBuilder().withRouplexTcpBinder(rouplexBinder).withLocalAddress(null, 0).build().close();
+        rouplexBinder.close();
     }
 
     @Test
-    public void testServerWithSharedBrokerWithNullExecutorShutdown() throws Exception {
-        RouplexTcpBroker rouplexBroker = new RouplexTcpBroker(Selector.open(), null);
-        RouplexTcpServer.newBuilder().withRouplexBroker(rouplexBroker).withLocalAddress(null, 0).build().close();
-        rouplexBroker.close();
+    public void testServerWithSharedBinderWithNullExecutorShutdown() throws Exception {
+        RouplexTcpBinder rouplexBinder = new RouplexTcpBinder(Selector.open(), null);
+        RouplexTcpServer.newBuilder().withRouplexTcpBinder(rouplexBinder).withLocalAddress(null, 0).build().close();
+        rouplexBinder.close();
     }
 
     @Test
-    public void testServerClosesOnSharedBrokerShutdown() throws Exception {
-        RouplexTcpBroker rouplexBroker = new RouplexTcpBroker(Selector.open(), Executors.newSingleThreadExecutor());
+    public void testServerClosesOnSharedBinderShutdown() throws Exception {
+        RouplexTcpBinder rouplexBinder = new RouplexTcpBinder(Selector.open(), Executors.newSingleThreadExecutor());
         RouplexTcpServer tcpServer = RouplexTcpServer.newBuilder()
-                .withRouplexBroker(rouplexBroker).withLocalAddress(null, 0).build();
-        rouplexBroker.close();
+                .withRouplexTcpBinder(rouplexBinder).withLocalAddress(null, 0).build();
+        rouplexBinder.close();
 
         for (int millis = 1; millis < 1000; millis *= 2) {
             if (tcpServer.isClosed()) {
@@ -68,7 +68,7 @@ public class ShutdownTest {
     @Test
     public void testServerClosesOnOwnedShutdown() throws Exception {
         RouplexTcpServer tcpServer = RouplexTcpServer.newBuilder().withLocalAddress(null, 0).build();
-        tcpServer.getRouplexTcpBroker().close();
+        tcpServer.getRouplexTcpBinder().close();
 
         for (int millis = 1; millis < 1000; millis *= 2) {
             if (tcpServer.isClosed()) {
