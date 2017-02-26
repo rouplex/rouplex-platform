@@ -19,29 +19,36 @@ public class ShutdownTest {
     }
 
     @Test
-    public void testBrokerWithExplicitExecutorShutdown() throws Exception {
+    public void testBrokerWithSharedExecutorShutdown() throws Exception {
         new RouplexTcpBroker(Selector.open(), Executors.newSingleThreadExecutor()).close();
     }
 
     @Test
-    public void testServerWithImplicitBrokerShutdown() throws Exception {
-        RouplexTcpServer.newBuilder().withLocalAddress(null, 0).build().close();
+    public void testServerWithNoBrokerShutdown() throws Exception {
+        RouplexTcpServer.newBuilder().withLocalAddress(null, 9999).build().close();
     }
 
     @Test
-    public void testServerWithExplicitNullBrokerShutdown() throws Exception {
+    public void testServerWithNullBrokerShutdown() throws Exception {
         RouplexTcpServer.newBuilder().withRouplexBroker(null).withLocalAddress(null, 0).build().close();
     }
 
     @Test
-    public void testServerWithExplicitBrokerWithExecutorShutdown() throws Exception {
+    public void testServerWithSharedBrokerWithExecutorShutdown() throws Exception {
         RouplexTcpBroker rouplexBroker = new RouplexTcpBroker(Selector.open(), Executors.newSingleThreadExecutor());
         RouplexTcpServer.newBuilder().withRouplexBroker(rouplexBroker).withLocalAddress(null, 0).build().close();
         rouplexBroker.close();
     }
 
     @Test
-    public void testServerClosesOnBrokerShutdown() throws Exception {
+    public void testServerWithSharedBrokerWithNullExecutorShutdown() throws Exception {
+        RouplexTcpBroker rouplexBroker = new RouplexTcpBroker(Selector.open(), null);
+        RouplexTcpServer.newBuilder().withRouplexBroker(rouplexBroker).withLocalAddress(null, 0).build().close();
+        rouplexBroker.close();
+    }
+
+    @Test
+    public void testServerClosesOnSharedBrokerShutdown() throws Exception {
         RouplexTcpBroker rouplexBroker = new RouplexTcpBroker(Selector.open(), Executors.newSingleThreadExecutor());
         RouplexTcpServer tcpServer = RouplexTcpServer.newBuilder()
                 .withRouplexBroker(rouplexBroker).withLocalAddress(null, 0).build();
@@ -59,9 +66,20 @@ public class ShutdownTest {
     }
 
     @Test
-    public void testServerWithExplicitBrokerWithoutExecutorShutdown() throws Exception {
-        RouplexTcpBroker rouplexBroker = new RouplexTcpBroker(Selector.open(), null);
-        RouplexTcpServer.newBuilder().withRouplexBroker(rouplexBroker).withLocalAddress(null, 0).build().close();
-        rouplexBroker.close();
+    public void testServerClosesOnOwnedShutdown() throws Exception {
+        RouplexTcpServer tcpServer = RouplexTcpServer.newBuilder().withLocalAddress(null, 0).build();
+        tcpServer.getRouplexTcpBroker().close();
+
+        for (int millis = 1; millis < 1000; millis *= 2) {
+            if (tcpServer.isClosed()) {
+                return;
+            }
+
+            Thread.sleep(millis);
+        }
+
+        Assert.assertTrue(tcpServer.isClosed());
     }
+
+
 }

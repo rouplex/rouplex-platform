@@ -59,7 +59,7 @@ public class ClientServerTest implements Closeable {
         runTcpClientsRequest.maxDelayMillisBetweenSends = 11;
         runTcpClientsRequest.maxPayloadSize = 10001;
 
-       // clientServerTest.runTcpClientsRequest(runTcpClientsRequest);
+        clientServerTest.runTcpClientsRequest(runTcpClientsRequest);
 
         // Wait for clients to finish
         Thread.sleep(runTcpClientsRequest.maxDelayMillisBeforeCreatingClient + runTcpClientsRequest.maxClientLifeMillis);
@@ -69,7 +69,7 @@ public class ClientServerTest implements Closeable {
     }
 
     ClientServerTest() throws IOException {
-        sharedRouplexTcpBroker = new RouplexTcpBroker(Selector.open(), Executors.newSingleThreadExecutor());
+        sharedRouplexTcpBroker = new RouplexTcpBroker(Selector.open(), null);
     }
 
     void startReport() {

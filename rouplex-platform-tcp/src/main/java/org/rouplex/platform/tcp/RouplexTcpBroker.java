@@ -36,6 +36,10 @@ public class RouplexTcpBroker implements Closeable {
     protected EventListener<RouplexTcpClient> tcpClientAddedListener;
     private boolean isClosing;
 
+    public RouplexTcpBroker(Selector selector) {
+        this(selector, null);
+    }
+
     public RouplexTcpBroker(Selector selector, ExecutorService executorService) {
         this.selector = selector; // this will be a little trickier with ssl, punting for now
         this.executorService = (sharedExecutorService = executorService != null)

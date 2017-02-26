@@ -239,8 +239,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
 
     private RouplexTcpClient connect() throws IOException {
         if (rouplexTcpBroker == null) {
-            rouplexTcpBroker = new RouplexTcpBroker(sslContext == null
-                    ? Selector.open() : SSLSelector.open(), Executors.newSingleThreadExecutor());
+            rouplexTcpBroker = new RouplexTcpBroker(sslContext == null ? Selector.open() : SSLSelector.open(), null);
         }
 
         if (selectableChannel == null) {
