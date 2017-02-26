@@ -1,8 +1,6 @@
 package org.rouplex;
 
-import com.codahale.metrics.ConsoleReporter;
-import com.codahale.metrics.Meter;
-import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.*;
 import org.rouplex.platform.rr.EventListener;
 import org.rouplex.platform.rr.ReceiveChannel;
 import org.rouplex.platform.rr.SendChannel;
@@ -33,6 +31,7 @@ public class ClientServerTest implements Closeable {
     final MetricRegistry clientServerMetrics = new MetricRegistry();
     ConsoleReporter reporter;
 
+
     public static void main(String[] args) throws Exception {
         ClientServerTest clientServerTest = new ClientServerTest();
         clientServerTest.startReport();
@@ -47,14 +46,14 @@ public class ClientServerTest implements Closeable {
         RunTcpClientsRequest runTcpClientsRequest = new RunTcpClientsRequest();
         runTcpClientsRequest.hostname = inetSocketAddress.getHostName();
         runTcpClientsRequest.port = inetSocketAddress.getPort();
-        runTcpClientsRequest.clientCount = 1;
+        runTcpClientsRequest.clientCount = 1000;
 
-        runTcpClientsRequest.minClientLifeMillis = 1000;
+        runTcpClientsRequest.minClientLifeMillis = 10000000;
         runTcpClientsRequest.minDelayMillisBeforeCreatingClient = 10;
         runTcpClientsRequest.minDelayMillisBetweenSends = 10;
         runTcpClientsRequest.minPayloadSize = 10000;
 
-        runTcpClientsRequest.maxClientLifeMillis = 1001;
+        runTcpClientsRequest.maxClientLifeMillis = 10000001;
         runTcpClientsRequest.maxDelayMillisBeforeCreatingClient = 11;
         runTcpClientsRequest.maxDelayMillisBetweenSends = 11;
         runTcpClientsRequest.maxPayloadSize = 10001;
@@ -72,16 +71,6 @@ public class ClientServerTest implements Closeable {
         sharedRouplexTcpBroker = new RouplexTcpBroker(Selector.open(), null);
     }
 
-    void startReport() {
-        reporter = ConsoleReporter.forRegistry(clientServerMetrics)
-                .convertRatesTo(TimeUnit.SECONDS)
-                .convertDurationsTo(TimeUnit.MILLISECONDS)
-                .build();
-
-        reporter.report();
-        reporter.start(1, TimeUnit.SECONDS);
-    }
-
     public RouplexTcpServer startTcpServer(StartTcpServerRequest request) throws IOException {
         RouplexTcpServer rouplexTcpServer = RouplexTcpServer.newBuilder()
                 .withLocalAddress(request.hostname, request.port)
@@ -91,12 +80,9 @@ public class ClientServerTest implements Closeable {
         final String hostPort = String.format("%s:%s", inetSocketAddress.getHostName(), inetSocketAddress.getPort());
         rouplexTcpServers.put(hostPort, rouplexTcpServer);
 
-        final Meter addedClients = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "added", "client", hostPort));
         rouplexTcpServer.getRouplexTcpBroker().setTcpClientAddedListener(new EventListener<RouplexTcpClient>() {
             @Override
             public void onEvent(RouplexTcpClient rouplexTcpClient) {
-                rouplexTcpClients.add(rouplexTcpClient);
-                addedClients.mark();
                 new EchoResponder(rouplexTcpClient, hostPort);
             }
         });
@@ -105,18 +91,26 @@ public class ClientServerTest implements Closeable {
     }
 
     class EchoResponder {
-        ByteBuffer sendBuffer;
         final SendChannel<ByteBuffer> sendChannel;
         final Throttle receiveThrottle;
+
+        final Meter addedClients;
+        final Meter removedClients;
         final Meter receivedBytes;
         final Meter sentBytes;
-        Meter removedClients;
+        final Histogram incomingMessageSizes;
+
+        ByteBuffer sendBuffer;
 
         EchoResponder(RouplexTcpClient rouplexTcpClient, String hostPort) {
-            removedClients = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "removed", "client", hostPort));
+            String clientId = rouplexTcpClient.hashCode() + "";
+            addedClients = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "server", hostPort, "added", "client", clientId));
+            removedClients = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "server", hostPort, "removed", "client", clientId));
+            receivedBytes = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "server", hostPort, "received", "client", clientId));
+            sentBytes = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "server", hostPort, "sent", "client", clientId));
+            incomingMessageSizes = clientServerMetrics.histogram(MetricRegistry.name(EchoResponder.class, "server", hostPort, "incomingMessageSizes", "client", clientId));
 
-            receivedBytes = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "received", rouplexTcpClient.hashCode() + ""));
-            sentBytes = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "sent", rouplexTcpClient.hashCode() + ""));
+            addedClients.mark();
 
             sendChannel = rouplexTcpClient.hookSendChannel(new Throttle() {
                 @Override
@@ -129,9 +123,11 @@ public class ClientServerTest implements Closeable {
                 @Override
                 public boolean receive(byte[] payload) {
                     if (payload == null) {
+                        removedClients.mark();
                         return sendChannel.send(null);
                     }
 
+                    // incomingMessageSizes.update(payload.length);
                     receivedBytes.mark(payload.length);
                     sendBuffer = ByteBuffer.wrap(payload);
                     return send();
@@ -148,13 +144,11 @@ public class ClientServerTest implements Closeable {
     }
 
     public void runTcpClientsRequest(final RunTcpClientsRequest request) throws IOException {
-        final Meter addedClients = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "added", "client", "CLIENT"));
-        final Meter failedCreationClients = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "failedCreation", "client", "CLIENT"));
+        final Meter createdClients = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "created", "client"));
+        final Meter failedCreationClients = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "uncreated", "client"));
         sharedRouplexTcpBroker.setTcpClientAddedListener(new EventListener<RouplexTcpClient>() {
             @Override
             public void onEvent(RouplexTcpClient rouplexTcpClient) {
-                rouplexTcpClients.add(rouplexTcpClient);
-                addedClients.mark();
                 new EchoRequester(rouplexTcpClient, request);
             }
         });
@@ -171,6 +165,7 @@ public class ClientServerTest implements Closeable {
                                 .withRouplexBroker(sharedRouplexTcpBroker)
                                 .withRemoteAddress(request.hostname, request.port)
                                 .build();
+                        createdClients.mark();
                     } catch (IOException ioe) {
                         failedCreationClients.mark();
                     }
@@ -184,15 +179,23 @@ public class ClientServerTest implements Closeable {
         ByteBuffer sendBuffer;
         final SendChannel<ByteBuffer> sendChannel;
         final Throttle receiveThrottle;
+
+        final Meter addedClients;
+        final Meter removedClients;
         final Meter receivedBytes;
         final Meter sentBytes;
 
         EchoRequester(RouplexTcpClient rouplexTcpClient, RunTcpClientsRequest request) {
             this.request = request;
+            rouplexTcpClients.add(rouplexTcpClient);
 
-            final Meter removedClients = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "removed", "client", "CLIENT"));
-            sentBytes = clientServerMetrics.meter(MetricRegistry.name(EchoRequester.class, "sent", rouplexTcpClient.hashCode() + ""));
-            receivedBytes = clientServerMetrics.meter(MetricRegistry.name(EchoRequester.class, "received", rouplexTcpClient.hashCode() + ""));
+            String clientId = rouplexTcpClient.hashCode() + "";
+            addedClients = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "client", clientId, "added"));
+            removedClients = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "client", clientId, "removed"));
+            sentBytes = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "client", clientId, "sent"));
+            receivedBytes = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "client", clientId, "received"));
+
+            addedClients.mark();
 
             sendChannel = rouplexTcpClient.hookSendChannel(new Throttle() {
                 @Override
@@ -219,7 +222,9 @@ public class ClientServerTest implements Closeable {
                 public void run() {
                     sendChannel.send(null); // send EOS
                 }
-            }, request.maxClientLifeMillis, TimeUnit.MILLISECONDS); // after a while
+            }, request.maxClientLifeMillis, TimeUnit.MILLISECONDS); // finish after a while
+
+            send();
         }
 
         private boolean send() {
@@ -238,6 +243,7 @@ public class ClientServerTest implements Closeable {
                 scheduledExecutor.schedule(new Runnable() {
                     @Override
                     public void run() {
+                        sendBuffer.clear(); // simulate new content
                         send();
                     }
                 }, sendDataMillis, TimeUnit.MILLISECONDS);
@@ -245,6 +251,16 @@ public class ClientServerTest implements Closeable {
 
             return sent;
         }
+    }
+
+    private void startReport() {
+        reporter = ConsoleReporter.forRegistry(clientServerMetrics)
+                .convertRatesTo(TimeUnit.SECONDS)
+                .convertDurationsTo(TimeUnit.MILLISECONDS)
+                .build();
+
+        reporter.report();
+        reporter.start(3, TimeUnit.SECONDS);
     }
 
     @Override
