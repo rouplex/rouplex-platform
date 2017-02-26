@@ -38,10 +38,7 @@ public class ServerKiller {
             }
 
             if (rouplexBroker != null) {
-                try {
-                    rouplexBroker.close();
-                } catch (IOException e) {
-                }
+                rouplexBroker.close();
             }
         }
     }

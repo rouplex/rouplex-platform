@@ -1,5 +1,6 @@
 package org.rouplex.platform.tcp;
 
+import org.rouplex.commons.annotations.Final;
 import org.rouplex.commons.annotations.Nullable;
 
 import javax.net.ssl.SSLContext;
@@ -19,13 +20,18 @@ import java.nio.channels.ServerSocketChannel;
 class RouplexTcpChannel implements Closeable {
     protected final Object lock = new Object();
 
+    @Final
     protected SocketAddress localAddress;
-    protected SelectionKey selectionKey;
-    protected SelectableChannel selectableChannel;
+    @Final
     protected RouplexTcpBroker rouplexTcpBroker;
+    @Final
     protected SSLContext sslContext;
+    @Final
     protected boolean sharedRouplexBroker;
-    private boolean isClosed;
+    @Final // set in build() if not set
+    protected SelectableChannel selectableChannel;
+    // not final, it is set from broker
+    protected SelectionKey selectionKey;
 
     RouplexTcpChannel(SelectableChannel selectableChannel, RouplexTcpBroker rouplexTcpBroker) {
         this.selectableChannel = selectableChannel;
@@ -117,36 +123,17 @@ class RouplexTcpChannel implements Closeable {
                 return;
             }
 
-            isClosed = true;
-            IOException pendingException = null;
-
-            if (selectableChannel != null) {
-                try {
-                    selectableChannel.close();
-                } catch (IOException ioe) {
-                    pendingException = ioe;
-                }
-            }
-
             if (!sharedRouplexBroker && rouplexTcpBroker != null) {
-                try {
-                    rouplexTcpBroker.close();
-                } catch (IOException ioe) {
-                    if (pendingException == null) {
-                        pendingException = ioe;
-                    }
-                }
+                rouplexTcpBroker.close();
             }
 
-            if (pendingException != null) {
-                throw pendingException;
-            }
+            selectableChannel.close();
         }
     }
 
     public boolean isClosed() {
         synchronized (lock) {
-            return isClosed;
+            return !selectableChannel.isOpen();
         }
     }
 }

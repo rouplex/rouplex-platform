@@ -26,14 +26,15 @@ public class RouplexTcpBroker implements Closeable {
     protected final ExecutorService executorService;
     protected final boolean sharedExecutorService;
 
-    protected final List<RouplexTcpChannel> registeringChannels = new ArrayList<RouplexTcpChannel>();
+    protected List<RouplexTcpChannel> registeringChannels = new ArrayList<RouplexTcpChannel>();
     protected final Map<SelectionKey, Integer> addingInterestOps = new HashMap<SelectionKey, Integer>();
     protected final Map<SelectionKey, Integer> removingInterestOps = new HashMap<SelectionKey, Integer>();
     protected final SortedByValueMap<SelectionKey, Long> resumingReads = new SortedByValueMap<SelectionKey, Long>();
     protected final SortedByValueMap<SelectionKey, Long> resumingAccepts = new SortedByValueMap<SelectionKey, Long>();
 
-    @Nullable protected EventListener<RouplexTcpClient> tcpClientAddedListener;
-    private boolean isClosed;
+    @Nullable
+    protected EventListener<RouplexTcpClient> tcpClientAddedListener;
+    private boolean isClosing;
 
     public RouplexTcpBroker(Selector selector, ExecutorService executorService) {
         this.selector = selector; // this will be a little trickier with ssl, punting for now
@@ -44,7 +45,7 @@ public class RouplexTcpBroker implements Closeable {
 
     void addRouplexChannel(RouplexTcpChannel rouplexTcpChannel) throws IOException {
         synchronized (lock) {
-            if (isClosed()) {
+            if (isClosing) {
                 throw new IOException("Already closed.");
             }
 
@@ -53,8 +54,8 @@ public class RouplexTcpBroker implements Closeable {
         }
     }
 
-    private void registerRouplexChannels() {
-        for (RouplexTcpChannel rouplexTcpChannel : registeringChannels) {
+    private void registerRouplexChannels(List<RouplexTcpChannel> registerChannels) {
+        for (RouplexTcpChannel rouplexTcpChannel : registerChannels) {
             try {
                 SelectableChannel selectableChannel = rouplexTcpChannel.getSelectableChannel();
                 selectableChannel.configureBlocking(false);
@@ -77,7 +78,8 @@ public class RouplexTcpBroker implements Closeable {
                 if (interestOps != SelectionKey.OP_ACCEPT && tcpClientAddedListener != null) {
                     tcpClientAddedListener.onEvent((RouplexTcpClient) rouplexTcpChannel);
                 }
-            } catch (IOException cce) {
+            } catch (Exception cce) {
+                // ClosedChannelException | IllegalBlockingModeException | RuntimeException from client.onEvent()
                 try {
                     rouplexTcpChannel.close();
                 } catch (IOException ioe) {
@@ -85,8 +87,6 @@ public class RouplexTcpBroker implements Closeable {
                 }
             }
         }
-
-        registeringChannels.clear();
     }
 
     private long updateInterestOpsAndCalculateSelectTimeout() {
@@ -143,18 +143,35 @@ public class RouplexTcpBroker implements Closeable {
                 currentThread.setName("RouplexTcpBroker");
                 ByteBuffer readBuffer = ByteBuffer.allocate(1000000);
 
-                while (!isClosed()) {
-                    if (executorService.isShutdown() || currentThread.isInterrupted()) {
-                        isClosed = true;
-                    }
+                try {
+                    while (true) {
+                        if (executorService.isShutdown() || currentThread.isInterrupted()) {
+                            close();
+                        }
 
-                    long selectTimeout;
-                    synchronized (lock) {
-                        registerRouplexChannels();
-                        selectTimeout = updateInterestOpsAndCalculateSelectTimeout();
-                    }
+                        long selectTimeout;
+                        List<RouplexTcpChannel> registerChannels;
+                        synchronized (lock) {
+                            if (isClosing) {
+                                break;
+                            }
 
-                    try {
+                            if (registeringChannels.isEmpty()) {
+                                registerChannels = null;
+                            } else {
+                                registerChannels = registeringChannels;
+                                registeringChannels = new ArrayList<RouplexTcpChannel>();
+                            }
+
+                            selectTimeout = updateInterestOpsAndCalculateSelectTimeout();
+                        }
+
+                        if (registerChannels != null) {
+                            // fire only lock-free events towards client! The trade off is that a new channel may fire
+                            // after a close() call, but that same chennel will be closed shortly after anyway
+                            registerRouplexChannels(registerChannels);
+                        }
+
                         selector.selectedKeys().clear();
                         selector.select(selectTimeout);
 
@@ -230,15 +247,12 @@ public class RouplexTcpBroker implements Closeable {
                                 // channel gets closed, unregistered
                             }
                         }
-                    } catch (Exception ioe) {
-                        //logger.info("Server finished accepting new connections. Cause: " + e.getMessage());
-                        try {
-                            close();
-                        } catch (IOException e2) {
-                            //logger.info("Failed stopping server. Cause: " + e2.getMessage());
-                        }
                     }
+                } catch (Exception ioe) {
+                    // something major, close the broker
                 }
+
+                syncClose(); // close synchronously.
             }
         });
     }
@@ -280,40 +294,47 @@ public class RouplexTcpBroker implements Closeable {
     }
 
     @Override
-    public void close() throws IOException {
+    public void close() {
         synchronized (lock) {
-            if (isClosed()) {
+            if (isClosing) {
                 return;
             }
 
-            isClosed = true;
-            IOException pendingException = null;
+            isClosing = true;
+        }
 
-            for (SelectionKey selectionKey : selector.keys()) {
-                try {
-                    selectionKey.channel().close();
-                } catch (IOException ioe) {
-                    if (pendingException == null) {
-                        pendingException = ioe;
-                    }
-                }
+        selector.wakeup();
+    }
+
+    private void syncClose() {
+        for (SelectionKey selectionKey : selector.keys()) {
+            try {
+                ((RouplexTcpChannel) selectionKey.attachment()).close();
+            } catch (IOException ioe) {
             }
+        }
 
-            if (!sharedExecutorService) {
-                executorService.shutdownNow();
+        for (RouplexTcpChannel rouplexTcpChannel : registeringChannels) {
+            try {
+                rouplexTcpChannel.close();
+            } catch (IOException ioe) {
             }
+        }
 
-            selector.wakeup();
+        if (!sharedExecutorService) {
+            executorService.shutdownNow();
+        }
 
-            if (pendingException != null) {
-                throw pendingException;
-            }
+        try {
+            selector.close();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
     public boolean isClosed() {
         synchronized (lock) {
-            return isClosed;
+            return isClosing;
         }
     }
 

@@ -6,7 +6,6 @@ import org.rouplex.nio.channels.spi.SSLSelector;
 import java.io.IOException;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
-import java.util.concurrent.Executors;
 
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
@@ -52,8 +51,7 @@ public class RouplexTcpServer extends RouplexTcpChannel {
 
     private RouplexTcpServer start() throws IOException {
         if (rouplexTcpBroker == null) {
-            rouplexTcpBroker = new RouplexTcpBroker(sslContext == null
-                    ? Selector.open() : SSLSelector.open(), Executors.newSingleThreadExecutor());
+            rouplexTcpBroker = new RouplexTcpBroker(sslContext == null ? Selector.open() : SSLSelector.open(), null);
         }
 
         ServerSocketChannel serverSocketChannel = sslContext == null ? ServerSocketChannel.open() : SSLServerSocketChannel.open(sslContext);

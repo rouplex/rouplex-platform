@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit;
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class ClientServerTest implements Closeable {
+    final RouplexTcpBroker sharedRouplexTcpBroker;
     final Map<String, RouplexTcpServer> rouplexTcpServers = new HashMap<String, RouplexTcpServer>();
     final Set<RouplexTcpClient> rouplexTcpClients = new HashSet<RouplexTcpClient>();
     final ScheduledExecutorService scheduledExecutor = Executors.newSingleThreadScheduledExecutor();
@@ -49,22 +50,26 @@ public class ClientServerTest implements Closeable {
         runTcpClientsRequest.clientCount = 1;
 
         runTcpClientsRequest.minClientLifeMillis = 1000;
-        runTcpClientsRequest.minDelayMillisBeforeCreatingClient = 1000;
-        runTcpClientsRequest.minDelayMillisBetweenSends = 100;
+        runTcpClientsRequest.minDelayMillisBeforeCreatingClient = 10;
+        runTcpClientsRequest.minDelayMillisBetweenSends = 10;
         runTcpClientsRequest.minPayloadSize = 10000;
 
-        runTcpClientsRequest.maxClientLifeMillis = 10001;
-        runTcpClientsRequest.maxDelayMillisBeforeCreatingClient = 1001;
-        runTcpClientsRequest.maxDelayMillisBetweenSends = 101;
+        runTcpClientsRequest.maxClientLifeMillis = 1001;
+        runTcpClientsRequest.maxDelayMillisBeforeCreatingClient = 11;
+        runTcpClientsRequest.maxDelayMillisBetweenSends = 11;
         runTcpClientsRequest.maxPayloadSize = 10001;
 
-        clientServerTest.runTcpClientsRequest(runTcpClientsRequest);
+       // clientServerTest.runTcpClientsRequest(runTcpClientsRequest);
 
         // Wait for clients to finish
         Thread.sleep(runTcpClientsRequest.maxDelayMillisBeforeCreatingClient + runTcpClientsRequest.maxClientLifeMillis);
 
         // Close all
         clientServerTest.close();
+    }
+
+    ClientServerTest() throws IOException {
+        sharedRouplexTcpBroker = new RouplexTcpBroker(Selector.open(), Executors.newSingleThreadExecutor());
     }
 
     void startReport() {
@@ -143,10 +148,9 @@ public class ClientServerTest implements Closeable {
     }
 
     public void runTcpClientsRequest(final RunTcpClientsRequest request) throws IOException {
-        final RouplexTcpBroker rouplexBroker = new RouplexTcpBroker(Selector.open(), Executors.newSingleThreadExecutor());
         final Meter addedClients = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "added", "client", "CLIENT"));
         final Meter failedCreationClients = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "failedCreation", "client", "CLIENT"));
-        rouplexBroker.setTcpClientAddedListener(new EventListener<RouplexTcpClient>() {
+        sharedRouplexTcpBroker.setTcpClientAddedListener(new EventListener<RouplexTcpClient>() {
             @Override
             public void onEvent(RouplexTcpClient rouplexTcpClient) {
                 rouplexTcpClients.add(rouplexTcpClient);
@@ -164,7 +168,7 @@ public class ClientServerTest implements Closeable {
                 public void run() {
                     try {
                         RouplexTcpClient.newBuilder()
-                                .withRouplexBroker(rouplexBroker)
+                                .withRouplexBroker(sharedRouplexTcpBroker)
                                 .withRemoteAddress(request.hostname, request.port)
                                 .build();
                     } catch (IOException ioe) {
@@ -261,6 +265,8 @@ public class ClientServerTest implements Closeable {
             }
         }
 
+        scheduledExecutor.shutdownNow();
+        sharedRouplexTcpBroker.close();
         reporter.close();
     }
 
