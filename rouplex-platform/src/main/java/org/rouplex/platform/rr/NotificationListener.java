@@ -5,7 +5,7 @@ package org.rouplex.platform.rr;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public interface EventListener<T> {
+public interface NotificationListener<T> {
     /**
      * An event has occurred
      *

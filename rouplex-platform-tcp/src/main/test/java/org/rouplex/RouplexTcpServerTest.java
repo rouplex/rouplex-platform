@@ -1,6 +1,6 @@
 package org.rouplex;
 
-import org.rouplex.platform.rr.EventListener;
+import org.rouplex.platform.rr.NotificationListener;
 import org.rouplex.platform.rr.ReceiveChannel;
 import org.rouplex.platform.rr.SendChannel;
 import org.rouplex.platform.rr.Throttle;
@@ -25,7 +25,7 @@ public class RouplexTcpServerTest {
                 .withLocalAddress("localhost", 9991)
                 .build();
 
-        rouplexTcpServer1.getRouplexTcpBinder().setTcpClientAddedListener(new EventListener<RouplexTcpClient>() {
+        rouplexTcpServer1.getRouplexTcpBinder().setTcpClientAddedListener(new NotificationListener<RouplexTcpClient>() {
 
             @Override
             public void onEvent(final RouplexTcpClient addedRouplexTcpClient) {

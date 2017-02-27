@@ -4,7 +4,7 @@ package org.rouplex;
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 
-import org.rouplex.platform.rr.EventListener;
+import org.rouplex.platform.rr.NotificationListener;
 import org.rouplex.platform.tcp.RouplexTcpBinder;
 import org.rouplex.platform.tcp.RouplexTcpClient;
 
@@ -18,7 +18,7 @@ public class ServerKiller {
 
         try {
             rouplexBinder = new RouplexTcpBinder(Selector.open(), null);
-            rouplexBinder.setTcpClientAddedListener(new EventListener<RouplexTcpClient>() {
+            rouplexBinder.setTcpClientAddedListener(new NotificationListener<RouplexTcpClient>() {
                 @Override
                 public void onEvent(RouplexTcpClient rouplexTcpClient) {
                     rouplexTcpClient.hookSendChannel(null).send(null); // send EOS

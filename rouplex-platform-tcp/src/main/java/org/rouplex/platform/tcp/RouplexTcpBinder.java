@@ -2,7 +2,7 @@ package org.rouplex.platform.tcp;
 
 import org.rouplex.commons.annotations.Nullable;
 import org.rouplex.commons.collections.SortedByValueMap;
-import org.rouplex.platform.rr.EventListener;
+import org.rouplex.platform.rr.NotificationListener;
 import org.rouplex.platform.rr.Throttle;
 
 import java.io.Closeable;
@@ -33,7 +33,7 @@ public class RouplexTcpBinder implements Closeable {
     protected final SortedByValueMap<SelectionKey, Long> resumingAccepts = new SortedByValueMap<SelectionKey, Long>();
 
     @Nullable
-    protected EventListener<RouplexTcpClient> tcpClientAddedListener;
+    protected NotificationListener<RouplexTcpClient> tcpClientAddedListener;
     private boolean isClosing;
 
     public RouplexTcpBinder(Selector selector) {
@@ -352,7 +352,7 @@ public class RouplexTcpBinder implements Closeable {
      *
      * @param tcpClientAddedListener
      */
-    public void setTcpClientAddedListener(@Nullable EventListener<RouplexTcpClient> tcpClientAddedListener) {
+    public void setTcpClientAddedListener(@Nullable NotificationListener<RouplexTcpClient> tcpClientAddedListener) {
         this.tcpClientAddedListener = tcpClientAddedListener;
     }
 }

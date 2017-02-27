@@ -1,7 +1,7 @@
 package org.rouplex;
 
 import com.codahale.metrics.*;
-import org.rouplex.platform.rr.EventListener;
+import org.rouplex.platform.rr.NotificationListener;
 import org.rouplex.platform.rr.ReceiveChannel;
 import org.rouplex.platform.rr.SendChannel;
 import org.rouplex.platform.rr.Throttle;
@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class ClientServerTest implements Closeable {
+public class Benchmarker implements Closeable {
     final RouplexTcpBinder sharedRouplexTcpBinder;
     final Map<String, RouplexTcpServer> rouplexTcpServers = new HashMap<String, RouplexTcpServer>();
     final Set<RouplexTcpClient> rouplexTcpClients = new HashSet<RouplexTcpClient>();
@@ -32,12 +32,12 @@ public class ClientServerTest implements Closeable {
     ConsoleReporter reporter;
 
     public static void main(String[] args) throws Exception {
-        ClientServerTest clientServerTest = new ClientServerTest();
+        Benchmarker benchmarker = new Benchmarker();
 
         // Start server
         StartTcpServerRequest startTcpServerRequest = new StartTcpServerRequest();
         startTcpServerRequest.port = 9999;
-        RouplexTcpServer rouplexTcpServer = clientServerTest.startTcpServer(startTcpServerRequest);
+        RouplexTcpServer rouplexTcpServer = benchmarker.startTcpServer(startTcpServerRequest);
         InetSocketAddress inetSocketAddress = (InetSocketAddress) rouplexTcpServer.getLocalAddress();
 
         // Start clients
@@ -56,16 +56,16 @@ public class ClientServerTest implements Closeable {
         runTcpClientsRequest.maxDelayMillisBetweenSends = 101;
         runTcpClientsRequest.maxPayloadSize = 10001;
 
-        clientServerTest.runTcpClientsRequest(runTcpClientsRequest);
+        benchmarker.runTcpClientsRequest(runTcpClientsRequest);
 
         // Wait for clients to finish
         Thread.sleep(runTcpClientsRequest.maxDelayMillisBeforeCreatingClient + runTcpClientsRequest.maxClientLifeMillis);
 
         // Close all
-        clientServerTest.close();
+        benchmarker.close();
     }
 
-    ClientServerTest() throws IOException {
+    Benchmarker() throws IOException {
         sharedRouplexTcpBinder = new RouplexTcpBinder(Selector.open(), null);
 
         reporter = ConsoleReporter.forRegistry(clientServerMetrics)
@@ -86,7 +86,7 @@ public class ClientServerTest implements Closeable {
         final String hostPort = String.format("%s:%s", inetSocketAddress.getHostName(), inetSocketAddress.getPort());
         rouplexTcpServers.put(hostPort, rouplexTcpServer);
 
-        rouplexTcpServer.getRouplexTcpBinder().setTcpClientAddedListener(new EventListener<RouplexTcpClient>() {
+        rouplexTcpServer.getRouplexTcpBinder().setTcpClientAddedListener(new NotificationListener<RouplexTcpClient>() {
             @Override
             public void onEvent(RouplexTcpClient rouplexTcpClient) {
                 new EchoResponder(rouplexTcpClient, hostPort);
@@ -156,7 +156,7 @@ public class ClientServerTest implements Closeable {
     public void runTcpClientsRequest(final RunTcpClientsRequest request) throws IOException {
         final Meter createdClients = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "created", "client"));
         final Meter failedCreationClients = clientServerMetrics.meter(MetricRegistry.name(EchoResponder.class, "uncreated", "client"));
-        sharedRouplexTcpBinder.setTcpClientAddedListener(new EventListener<RouplexTcpClient>() {
+        sharedRouplexTcpBinder.setTcpClientAddedListener(new NotificationListener<RouplexTcpClient>() {
             @Override
             public void onEvent(RouplexTcpClient rouplexTcpClient) {
                 rouplexTcpClients.add(rouplexTcpClient);
