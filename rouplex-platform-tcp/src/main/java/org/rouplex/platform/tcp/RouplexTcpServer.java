@@ -1,8 +1,10 @@
 package org.rouplex.platform.tcp;
 
+import org.rouplex.commons.annotations.Nullable;
 import org.rouplex.nio.channels.SSLServerSocketChannel;
 import org.rouplex.nio.channels.spi.SSLSelector;
 
+import javax.net.ssl.SSLContext;
 import java.io.IOException;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
@@ -27,6 +29,13 @@ public class RouplexTcpServer extends RouplexTcpChannel {
         public Builder withBacklog(int backlog) {
             checkNotBuilt();
             instance.backlog = backlog;
+            return builder;
+        }
+
+        public Builder withSecure(boolean secure, @Nullable SSLContext sslContext) throws Exception {
+            checkNotBuilt();
+
+            instance.sslContext = secure ? sslContext != null ? sslContext : SSLContext.getDefault() : null;
             return builder;
         }
 

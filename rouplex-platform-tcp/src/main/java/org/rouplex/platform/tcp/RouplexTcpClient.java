@@ -7,6 +7,9 @@ import org.rouplex.platform.rr.ReceiveChannel;
 import org.rouplex.platform.rr.SendChannel;
 import org.rouplex.platform.rr.Throttle;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -15,6 +18,8 @@ import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.LinkedList;
 import java.util.concurrent.TimeUnit;
 
@@ -47,6 +52,13 @@ public class RouplexTcpClient extends RouplexTcpChannel {
             return builder;
         }
 
+        public Builder withSecure(boolean secure, @Nullable SSLContext sslContext) throws Exception {
+            checkNotBuilt();
+
+            instance.sslContext = secure ? sslContext != null ? sslContext : buildRelaxedSSLContext() : null;
+            return builder;
+        }
+
         @Override
         public RouplexTcpClient build() throws IOException {
             checkNotBuilt();
@@ -59,7 +71,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
     }
 
     public static Builder newBuilder() {
-        return new Builder(new RouplexTcpClient(null, null));
+        return new Builder(new RouplexTcpClient(null, null, null));
     }
 
     class ThrottledReceiver extends Throttle {
@@ -231,9 +243,12 @@ public class RouplexTcpClient extends RouplexTcpChannel {
     protected SocketAddress remoteAddress;
     final ThrottledSender throttledSender = new ThrottledSender();
     final ThrottledReceiver throttledReceiver = new ThrottledReceiver();
+    final RouplexTcpServer rouplexTcpServer;
 
-    RouplexTcpClient(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder) {
+    RouplexTcpClient(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder, RouplexTcpServer rouplexTcpServer) {
         super(selectableChannel, rouplexTcpBinder);
+
+        this.rouplexTcpServer = rouplexTcpServer;
     }
 
     private RouplexTcpClient connect() throws IOException {
@@ -262,8 +277,14 @@ public class RouplexTcpClient extends RouplexTcpChannel {
      *          The channel to be used to send the bits.
      */
     public SendChannel<ByteBuffer> hookSendChannel(Throttle throttle) {
-        throttledSender.throttle = throttle;
-        return throttledSender;
+        synchronized (lock) {
+            if (throttledSender.throttle != null) {
+                throw new IllegalStateException("Send channel already hooked.");
+            }
+
+            throttledSender.throttle = throttle;
+            return throttledSender;
+        }
     }
 
     /**
@@ -276,7 +297,51 @@ public class RouplexTcpClient extends RouplexTcpChannel {
      *          The throttle construct which the receiver can use to throttle the flow of receiving bits.
      */
     public Throttle hookReceiveChannel(@Nullable ReceiveChannel<byte[]> receiveChannel) {
-        throttledReceiver.receiveChannel = receiveChannel;
-        return throttledReceiver;
+        synchronized (lock) {
+            if (throttledReceiver.receiveChannel != null) {
+                throw new IllegalStateException("Receive channel already hooked.");
+            }
+
+            throttledReceiver.receiveChannel = receiveChannel;
+            return throttledReceiver;
+        }
+    }
+
+    /**
+     * The local server this client belongs to, or null if this client in not related to a local server.
+     *
+     * @return
+     */
+    public RouplexTcpServer getRouplexTcpServer() {
+        return rouplexTcpServer;
+    }
+
+    /**
+     * Convenience method for building client side {@link SSLContext} instances that do not perform any kind of
+     * authorization.
+     *
+     * @return
+     * @throws Exception
+     */
+    public static SSLContext buildRelaxedSSLContext() throws Exception {
+        TrustManager tm = new X509TrustManager() {
+            @Override
+            public void checkClientTrusted(X509Certificate[] x509Certificates, String s) throws CertificateException {
+            }
+
+            @Override
+            public void checkServerTrusted(X509Certificate[] x509Certificates, String s) throws CertificateException {
+            }
+
+            @Override
+            public X509Certificate[] getAcceptedIssuers() {
+                return new X509Certificate[0];
+            }
+        };
+
+        SSLContext sslContext = SSLContext.getInstance("TLS");
+        sslContext.init(null, new TrustManager[]{tm}, null);
+
+        return sslContext;
     }
 }

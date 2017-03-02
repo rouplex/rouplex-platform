@@ -29,8 +29,8 @@
 
         <dependency>
             <groupId>org.rouplex</groupId>
-            <artifactId>nossl</artifactId>
-            <version>1.6.0-SNAPSHOT</version>
+            <artifactId>niossl</artifactId>
+            <version>1.8.0-SNAPSHOT</version>
         </dependency>
 
         <!-- Metrics collection made easy (for testing only for now)-->

@@ -5,7 +5,7 @@ package org.rouplex.platform.rr;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public interface ReplyChannel<R, E extends Exception> {
-    void onReply(R reply);
+public interface ResponseChannel<R, E extends Exception> {
+    void onResponse(R response);
     void onException(E exception);
 }

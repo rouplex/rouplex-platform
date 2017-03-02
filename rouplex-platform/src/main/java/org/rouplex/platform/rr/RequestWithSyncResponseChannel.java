@@ -7,6 +7,6 @@ import org.rouplex.commons.annotations.NotNull;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-interface RequestWithSyncReplyChannel<S, D> extends RequestWithReplyChannel<S, D> {
+interface RequestWithSyncResponseChannel<S, D> extends RequestWithResponseChannel<S, D> {
     @NotNull D send(@NotNull S request);// throws Exception;
 }

@@ -183,7 +183,8 @@ public class RouplexTcpBinder implements Closeable {
                             try {
                                 if (selectionKey.isAcceptable()) {
                                     SocketChannel socketChannel = ((ServerSocketChannel) selectionKey.channel()).accept();
-                                    addRouplexChannel(new RouplexTcpClient(socketChannel, RouplexTcpBinder.this));
+                                    addRouplexChannel(new RouplexTcpClient(socketChannel, RouplexTcpBinder.this,
+                                            (RouplexTcpServer) selectionKey.attachment()));
                                     continue;
                                 }
 
@@ -353,6 +354,12 @@ public class RouplexTcpBinder implements Closeable {
      * @param tcpClientAddedListener
      */
     public void setTcpClientAddedListener(@Nullable NotificationListener<RouplexTcpClient> tcpClientAddedListener) {
-        this.tcpClientAddedListener = tcpClientAddedListener;
+        synchronized (lock) {
+            if (this.tcpClientAddedListener != null) {
+                throw new IllegalStateException("Listener already set.");
+            }
+
+            this.tcpClientAddedListener = tcpClientAddedListener;
+        }
     }
 }

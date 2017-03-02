@@ -32,6 +32,8 @@ class RouplexTcpChannel implements Closeable {
     protected SelectableChannel selectableChannel;
     // not final, it is set from binder
     protected SelectionKey selectionKey;
+    // not final, set and changed by user
+    protected Object attachment;
 
     RouplexTcpChannel(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder) {
         this.selectableChannel = selectableChannel;
@@ -64,13 +66,6 @@ class RouplexTcpChannel implements Closeable {
             return builder;
         }
 
-        public B withSecure(boolean secure, @Nullable SSLContext sslContext) throws Exception {
-            checkNotBuilt();
-
-            instance.sslContext = secure ? sslContext != null ? sslContext : SSLContext.getDefault() : null;
-            return builder;
-        }
-
         public B withLocalAddress(SocketAddress localAddress) {
             checkNotBuilt();
 
@@ -90,6 +85,11 @@ class RouplexTcpChannel implements Closeable {
             }
 
             instance.localAddress = new InetSocketAddress(hostname, port);
+            return builder;
+        }
+
+        public B withAttachment(@Nullable Object attachment) {
+            instance.attachment = attachment;
             return builder;
         }
     }
@@ -135,5 +135,13 @@ class RouplexTcpChannel implements Closeable {
         synchronized (lock) {
             return !selectableChannel.isOpen();
         }
+    }
+
+    public Object getAttachment() {
+        return attachment;
+    }
+
+    public void setAttachment(Object attachment) {
+        this.attachment = attachment;
     }
 }
