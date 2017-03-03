@@ -18,10 +18,14 @@ public class ServerKiller {
 
         try {
             rouplexBinder = new RouplexTcpBinder(Selector.open(), null);
-            rouplexBinder.setTcpClientAddedListener(new NotificationListener<RouplexTcpClient>() {
+            rouplexBinder.setRouplexTcpClientAddedListener(new NotificationListener<RouplexTcpClient>() {
                 @Override
                 public void onEvent(RouplexTcpClient rouplexTcpClient) {
-                    rouplexTcpClient.hookSendChannel(null).send(null); // send EOS
+                    try {
+                        rouplexTcpClient.hookSendChannel(null).send(null); // send EOS
+                    } catch (IOException ioe) {
+                        // handle it
+                    }
                 }
             });
 

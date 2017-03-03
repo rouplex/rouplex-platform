@@ -1,5 +1,7 @@
 package org.rouplex.platform.rr;
 
+import java.io.IOException;
+
 /**
  * A channel which can send payloads of a generic type.
  *
@@ -14,5 +16,5 @@ public interface SendChannel<T> {
      * @return
      *          True if the payload was sent fully
      */
-    boolean send(T payload);
+    boolean send(T payload) throws IOException;
 }

@@ -123,11 +123,31 @@ class RouplexTcpChannel implements Closeable {
                 return;
             }
 
-            if (!sharedRouplexBinder && rouplexTcpBinder != null) {
-                rouplexTcpBinder.close();
+            IOException pendingIOException = null;
+
+            try {
+                selectableChannel.close();
+            } catch (IOException ioe) {
+                pendingIOException = ioe;
             }
 
-            selectableChannel.close();
+            if (rouplexTcpBinder != null) {
+                try {
+                    rouplexTcpBinder.removeChannel(this);
+                } catch (IOException ioe) {
+                    if (pendingIOException == null) {
+                        pendingIOException = ioe;
+                    }
+                }
+
+                if (!sharedRouplexBinder) {
+                    rouplexTcpBinder.close();
+                }
+            }
+
+            if (pendingIOException != null) {
+                throw pendingIOException;
+            }
         }
     }
 

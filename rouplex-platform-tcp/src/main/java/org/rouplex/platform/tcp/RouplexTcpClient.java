@@ -52,7 +52,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
             return builder;
         }
 
-        public Builder withSecure(boolean secure, @Nullable SSLContext sslContext) throws Exception {
+        public Builder withSecure(boolean secure, @Nullable SSLContext sslContext) throws IOException {
             checkNotBuilt();
 
             instance.sslContext = secure ? sslContext != null ? sslContext : buildRelaxedSSLContext() : null;
@@ -79,6 +79,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
 
         private byte[] pendingReceive;
         @Nullable private ReceiveChannel<byte[]> receiveChannel;
+        boolean eosReceived;
 
         private long rateLimitCurrentTimestamp;
         private long rateLimitCurrentBytes;
@@ -103,9 +104,9 @@ public class RouplexTcpClient extends RouplexTcpChannel {
         public void resume() {
             synchronized (receiveLock) {
                 if (pendingReceive != null) {
-                    // the user will be called receive(byte[]) with this lock acquired but that is safe
-                    // since this is the only place the lock is used (and actually the only reason to have it to
-                    // protect from competing resume() calls coming from user)
+                    // the user will be called receive(byte[]) with this lock acquired but that is safe since this is
+                    // the only place the lock is used (and actually the only reason to have it is to protect from
+                    // competing resume() calls coming from user)
                     if (!consumeSocketInput(pendingReceive)) {
                         return;
                     }
@@ -124,7 +125,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
                     rateLimitCurrentTimestamp = System.currentTimeMillis() + rateLimitMillis;
                     rateLimitBytes = 0;
                 } else {
-                    rateLimitCurrentBytes += payload == null ? 0 : payload.length;
+                    rateLimitCurrentBytes += payload.length;
                     if (rateLimitCurrentBytes > rateLimitBytes) {
                         rouplexTcpBinder.pauseRead(selectionKey, rateLimitCurrentTimestamp);
                     }
@@ -132,10 +133,14 @@ public class RouplexTcpClient extends RouplexTcpChannel {
             }
 
             if (receiveChannel != null) {
-                if (!receiveChannel.receive(payload)) {
+                if (!receiveChannel.receive(payload.length == 0 ? null : payload)) {
                     pendingReceive = payload;
                     return false;
                 }
+            }
+
+            if (eosReceived = payload.length == 0) {
+                handleEos();
             }
 
             return true;
@@ -149,6 +154,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
         @Nullable Throttle throttle;
         boolean paused;
         boolean eosReceived;
+        boolean eosApplied;
 
         private int transfer(ByteBuffer source, ByteBuffer destination) {
             int srcRemaining;
@@ -167,10 +173,10 @@ public class RouplexTcpClient extends RouplexTcpChannel {
         }
 
         @Override
-        public boolean send(ByteBuffer payload) {
+        public boolean send(ByteBuffer payload) throws IOException {
             int writeSize;
 
-            synchronized (writeBuffers) {
+            synchronized (lock) {
                 if (eosReceived) {
                     return false;
                 }
@@ -237,6 +243,19 @@ public class RouplexTcpClient extends RouplexTcpChannel {
             if (fromPaused) {
                 throttle.resume();
             }
+
+            if (writeBuffer == EOS) {
+                eosApplied = true;
+                handleEos();
+            }
+        }
+    }
+
+    private void handleEos() {
+        synchronized (lock) {
+            if (throttledSender.eosApplied && throttledReceiver.eosReceived) {
+                rouplexTcpBinder.closeChannel(this);
+            }
         }
     }
 
@@ -261,7 +280,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
                     ? SocketChannel.open(remoteAddress) : SSLSocketChannel.open(remoteAddress, sslContext);
         }
 
-        rouplexTcpBinder.addRouplexChannel(this);
+        rouplexTcpBinder.addChannel(this);
         return this;
     }
 
@@ -323,7 +342,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
      * @return
      * @throws Exception
      */
-    public static SSLContext buildRelaxedSSLContext() throws Exception {
+    public static SSLContext buildRelaxedSSLContext() throws IOException {
         TrustManager tm = new X509TrustManager() {
             @Override
             public void checkClientTrusted(X509Certificate[] x509Certificates, String s) throws CertificateException {
@@ -339,9 +358,12 @@ public class RouplexTcpClient extends RouplexTcpChannel {
             }
         };
 
-        SSLContext sslContext = SSLContext.getInstance("TLS");
-        sslContext.init(null, new TrustManager[]{tm}, null);
-
-        return sslContext;
+        try {
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, new TrustManager[]{tm}, null);
+            return sslContext;
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
     }
 }

@@ -32,10 +32,15 @@ public class RouplexTcpServer extends RouplexTcpChannel {
             return builder;
         }
 
-        public Builder withSecure(boolean secure, @Nullable SSLContext sslContext) throws Exception {
+        public Builder withSecure(boolean secure, @Nullable SSLContext sslContext) throws IOException {
             checkNotBuilt();
 
-            instance.sslContext = secure ? sslContext != null ? sslContext : SSLContext.getDefault() : null;
+            try {
+                instance.sslContext = secure ? sslContext != null ? sslContext : SSLContext.getDefault() : null;
+            } catch (Exception e) {
+                throw new IOException("Could not create SSLContext.", e);
+            }
+
             return builder;
         }
 
@@ -66,7 +71,7 @@ public class RouplexTcpServer extends RouplexTcpChannel {
         ServerSocketChannel serverSocketChannel = sslContext == null ? ServerSocketChannel.open() : SSLServerSocketChannel.open(sslContext);
         serverSocketChannel.bind(localAddress, backlog);
         selectableChannel = serverSocketChannel;
-        rouplexTcpBinder.addRouplexChannel(this);
+        rouplexTcpBinder.addChannel(this);
 
         return this;
     }
