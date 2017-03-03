@@ -2,6 +2,7 @@ package org.rouplex.platform.tcp;
 
 import org.rouplex.commons.annotations.Final;
 import org.rouplex.commons.annotations.Nullable;
+import org.rouplex.platform.rr.NotificationListener;
 
 import javax.net.ssl.SSLContext;
 import java.io.Closeable;
@@ -30,6 +31,11 @@ class RouplexTcpChannel implements Closeable {
     protected boolean sharedRouplexBinder;
     @Final // set in build() if not set
     protected SelectableChannel selectableChannel;
+    @Final
+    protected NotificationListener<RouplexTcpClient> createdRouplexTcpClientListener;
+    @Final
+    protected NotificationListener<RouplexTcpClient> failedCreatingRouplexTcpClientListener;
+
     // not final, it is set from binder
     protected SelectionKey selectionKey;
     // not final, set and changed by user
@@ -38,7 +44,7 @@ class RouplexTcpChannel implements Closeable {
     RouplexTcpChannel(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder) {
         this.selectableChannel = selectableChannel;
         this.rouplexTcpBinder = rouplexTcpBinder;
-        sharedRouplexBinder = rouplexTcpBinder != null;
+        sharedRouplexBinder = true;
     }
 
     static abstract class Builder<T extends RouplexTcpChannel, B extends Builder> {
@@ -88,6 +94,21 @@ class RouplexTcpChannel implements Closeable {
             return builder;
         }
 
+        public B withCreatedRouplexTcpClientListener(
+                NotificationListener<RouplexTcpClient> createdRouplexTcpClientListener) {
+            checkNotBuilt();
+
+            instance.createdRouplexTcpClientListener = createdRouplexTcpClientListener;
+            return builder;
+        }
+
+        public B withFailedCreatingRouplexTcpClientListener(
+                NotificationListener<RouplexTcpClient> failedCreatingRouplexTcpClientListener) {
+            checkNotBuilt();
+
+            instance.failedCreatingRouplexTcpClientListener = failedCreatingRouplexTcpClientListener;
+            return builder;
+        }
         public B withAttachment(@Nullable Object attachment) {
             instance.attachment = attachment;
             return builder;
@@ -133,7 +154,7 @@ class RouplexTcpChannel implements Closeable {
 
             if (rouplexTcpBinder != null) {
                 try {
-                    rouplexTcpBinder.removeChannel(this);
+                    rouplexTcpBinder.notifyClosedTcpChannelAsync(this);
                 } catch (IOException ioe) {
                     if (pendingIOException == null) {
                         pendingIOException = ioe;

@@ -27,8 +27,8 @@ public class RouplexTcpBinder implements Closeable {
     protected final ExecutorService executorService;
     protected final boolean sharedExecutorService;
 
-    protected List<RouplexTcpChannel> addingChannels = new ArrayList<RouplexTcpChannel>();
-    protected List<RouplexTcpChannel> removingChannels = new ArrayList<RouplexTcpChannel>();
+    protected List<RouplexTcpChannel> registeringChannels = new ArrayList<RouplexTcpChannel>();
+    protected List<RouplexTcpChannel> closingChannels = new ArrayList<RouplexTcpChannel>();
     protected final Map<SelectionKey, Integer> addingInterestOps = new HashMap<SelectionKey, Integer>();
     protected final Map<SelectionKey, Integer> removingInterestOps = new HashMap<SelectionKey, Integer>();
     protected final SortedByValueMap<SelectionKey, Long> resumingReads = new SortedByValueMap<SelectionKey, Long>();
@@ -39,7 +39,7 @@ public class RouplexTcpBinder implements Closeable {
     @Nullable
     protected NotificationListener<RouplexTcpClient> tcpClientRemovedListener;
 
-    // or isClosed, same semantics
+    // or isClosed, the same semantics
     private boolean isClosing;
 
     public RouplexTcpBinder(Selector selector) {
@@ -53,89 +53,96 @@ public class RouplexTcpBinder implements Closeable {
         start();
     }
 
-    void addChannel(RouplexTcpChannel channel) throws IOException {
+    /**
+     * Add the channel to be registered on next cycle of selector.
+     *
+     * @param rouplexTcpChannel
+     * @throws IOException
+     */
+    void registerTcpChannelAsync(RouplexTcpChannel rouplexTcpChannel) throws IOException {
         synchronized (lock) {
             if (isClosing) {
                 throw new IOException("Already closed.");
             }
 
-            addingChannels.add(channel);
+            registeringChannels.add(rouplexTcpChannel);
             selector.wakeup();
         }
     }
 
-    private void registerChannels(List<RouplexTcpChannel> registerChannels) {
-        for (RouplexTcpChannel registerChannel : registerChannels) {
+    private void registerTcpChannel(RouplexTcpChannel tcpChannel) {
+        try {
+            SelectableChannel selectableChannel = tcpChannel.getSelectableChannel();
+            selectableChannel.configureBlocking(false);
+
+            if (tcpChannel instanceof RouplexTcpClient) {
+                int interestOps = SelectionKey.OP_READ | SelectionKey.OP_WRITE;
+                boolean connected = ((SocketChannel) selectableChannel).isConnected();
+                if (!connected) {
+                    interestOps |= SelectionKey.OP_CONNECT;
+                }
+
+                tcpChannel.setSelectionKey(
+                        selectableChannel.register(selector, interestOps, tcpChannel));
+
+                if (connected) {
+                    notifyConnectedTcpChannel(tcpChannel);
+                }
+            }
+
+            else if (tcpChannel instanceof RouplexTcpServer) {
+                tcpChannel.setSelectionKey(
+                        selectableChannel.register(selector, SelectionKey.OP_ACCEPT, tcpChannel));
+            }
+        } catch (Exception e) {
+            // ClosedChannelException | IllegalBlockingModeException | RuntimeException from client.onEvent()
             try {
-                SelectableChannel selectableChannel = registerChannel.getSelectableChannel();
-                selectableChannel.configureBlocking(false);
-
-                int interestOps;
-                if (registerChannel instanceof RouplexTcpClient) {
-                    interestOps = SelectionKey.OP_READ | SelectionKey.OP_WRITE;
-                    if (!((SocketChannel) selectableChannel).isConnected()) {
-                        interestOps |= SelectionKey.OP_CONNECT;
-                    }
-                } else if (registerChannel instanceof RouplexTcpServer) {
-                    interestOps = SelectionKey.OP_ACCEPT;
-                } else {
-                    continue; // internal implementation error
-                }
-
-                registerChannel.setSelectionKey(selectableChannel.register(selector, interestOps, registerChannel));
-
-                // add rate client creation rate limiting here
-                if (interestOps != SelectionKey.OP_ACCEPT && tcpClientAddedListener != null) {
-                    tcpClientAddedListener.onEvent((RouplexTcpClient) registerChannel);
-                }
-            } catch (Exception cce) {
-                // ClosedChannelException | IllegalBlockingModeException | RuntimeException from client.onEvent()
-                try {
-                    registerChannel.close();
-                } catch (IOException ioe) {
-                    // we could add an exceptions consumer in the future and sink this out
-                }
+                tcpChannel.close();
+            } catch (IOException ioe) {
+                // the error has already been fired
             }
         }
     }
 
     // For channels that closed and need to report via binder
-    void removeChannel(RouplexTcpChannel channel) throws IOException {
+    void notifyConnectedTcpChannel(RouplexTcpChannel tcpChannel) throws IOException {
+        NotificationListener<RouplexTcpClient> tcpClientCreatedListener =
+                ((RouplexTcpClient) tcpChannel).createdRouplexTcpClientListener;
+
+        if (tcpClientCreatedListener != null) {
+            tcpClientCreatedListener.onEvent((RouplexTcpClient) tcpChannel);
+        }
+
+        if (tcpClientAddedListener != null) {
+            tcpClientAddedListener.onEvent((RouplexTcpClient) tcpChannel);
+        }
+    }
+
+    // For channels that closed and need to report via binder
+    void notifyClosedTcpChannelAsync(RouplexTcpChannel tcpChannel) throws IOException {
         synchronized (lock) {
             if (isClosing) {
                 throw new IOException("Already closed.");
             }
 
-            removingChannels.add(channel);
+            closingChannels.add(tcpChannel);
             selector.wakeup();
         }
     }
 
     // For channels
-    void closeChannel(final RouplexTcpChannel channel) {
+    void closeTcpChannel(final RouplexTcpChannel tcpChannel) {
         // this is called internally and isClosing can never be null
         executorService.submit(new Runnable() {
             @Override
             public void run() {
                 try {
-                    channel.close();
+                    tcpChannel.close();
                 } catch (IOException ioe) {
                     //
                 }
             }
         });
-    }
-
-    private void removeChannels(List<RouplexTcpChannel> closedChannels) {
-        for (RouplexTcpChannel closedChannel : closedChannels) {
-            try {
-                if (tcpClientRemovedListener != null) {
-                    tcpClientRemovedListener.onEvent((RouplexTcpClient) closedChannel);
-                }
-            } catch (Exception cce) {
-                // channel is already closed
-            }
-        }
     }
 
     private long updateInterestOpsAndCalculateSelectTimeout() {
@@ -206,18 +213,18 @@ public class RouplexTcpBinder implements Closeable {
                                 break;
                             }
 
-                            if (addingChannels.isEmpty()) {
+                            if (registeringChannels.isEmpty()) {
                                 registerChannels = null;
                             } else {
-                                registerChannels = addingChannels;
-                                addingChannels = new ArrayList<RouplexTcpChannel>();
+                                registerChannels = registeringChannels;
+                                registeringChannels = new ArrayList<RouplexTcpChannel>();
                             }
 
-                            if (removingChannels.isEmpty()) {
+                            if (closingChannels.isEmpty()) {
                                 closedChannels = null;
                             } else {
-                                closedChannels = removingChannels;
-                                removingChannels = new ArrayList<RouplexTcpChannel>();
+                                closedChannels = RouplexTcpBinder.this.closingChannels;
+                                closingChannels = new ArrayList<RouplexTcpChannel>();
                             }
 
                             selectTimeout = updateInterestOpsAndCalculateSelectTimeout();
@@ -226,11 +233,21 @@ public class RouplexTcpBinder implements Closeable {
                         if (registerChannels != null) {
                             // fire only lock-free events towards client! The trade off is that a new channel may fire
                             // after a close() call, but that same chennel will be closed shortly after anyway
-                            registerChannels(registerChannels);
+                            for (RouplexTcpChannel tcpChannel : registerChannels) {
+                                registerTcpChannel(tcpChannel);
+                            }
                         }
 
                         if (closedChannels != null) {
-                            removeChannels(closedChannels);
+                            for (RouplexTcpChannel closedChannel : closedChannels) {
+                                try {
+                                    if (tcpClientRemovedListener != null) {
+                                        tcpClientRemovedListener.onEvent((RouplexTcpClient) closedChannel);
+                                    }
+                                } catch (Exception cce) {
+                                    // channel is already closed
+                                }
+                            }
                         }
 
                         selector.selectedKeys().clear();
@@ -240,13 +257,26 @@ public class RouplexTcpBinder implements Closeable {
                             try {
                                 if (selectionKey.isAcceptable()) {
                                     SocketChannel socketChannel = ((ServerSocketChannel) selectionKey.channel()).accept();
-                                    addChannel(new RouplexTcpClient(socketChannel, RouplexTcpBinder.this,
+                                    registerTcpChannel(new RouplexTcpClient(socketChannel, RouplexTcpBinder.this,
                                             (RouplexTcpServer) selectionKey.attachment()));
                                     continue;
                                 }
 
                                 SocketChannel socketChannel = ((SocketChannel) selectionKey.channel());
                                 RouplexTcpClient rouplexTcpClient = (RouplexTcpClient) selectionKey.attachment();
+
+                                if (selectionKey.isConnectable()) {
+                                    try {
+                                        if (!socketChannel.finishConnect()) {
+                                            continue;
+                                        }
+
+                                        notifyConnectedTcpChannel(rouplexTcpClient);
+                                    } catch (IOException ioe) {
+                                        closeTcpChannel(rouplexTcpClient); // async close, this may block
+                                        continue;
+                                    }
+                                }
 
                                 if (selectionKey.isReadable()) {
                                     int read = socketChannel.read(readBuffer);
@@ -270,7 +300,7 @@ public class RouplexTcpBinder implements Closeable {
                                                 selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_READ);
                                             }
                                         } catch (RuntimeException receiverException) {
-                                            closeChannel(rouplexTcpClient); // async close, this may block
+                                            closeTcpChannel(rouplexTcpClient); // async close, this may block
                                             continue;
                                         }
                                     }
@@ -298,7 +328,7 @@ public class RouplexTcpBinder implements Closeable {
                                         try {
                                             rouplexTcpClient.throttledSender.removeWriteBuffer(writeBuffer);
                                         } catch (RuntimeException throttleException) {
-                                            closeChannel(rouplexTcpClient); // async close, this may block
+                                            closeTcpChannel(rouplexTcpClient); // async close, this may block
                                             break;
                                         }
 
@@ -380,7 +410,7 @@ public class RouplexTcpBinder implements Closeable {
             }
         }
 
-        for (RouplexTcpChannel rouplexTcpChannel : addingChannels) {
+        for (RouplexTcpChannel rouplexTcpChannel : registeringChannels) {
             try {
                 rouplexTcpChannel.close();
             } catch (IOException ioe) {
