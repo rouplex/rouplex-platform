@@ -35,9 +35,9 @@ public class RouplexTcpBinder implements Closeable {
     protected final SortedByValueMap<SelectionKey, Long> resumingAccepts = new SortedByValueMap<SelectionKey, Long>();
 
     @Nullable
-    protected NotificationListener<RouplexTcpClient> tcpClientAddedListener;
+    protected NotificationListener<RouplexTcpClient> rouplexTcpClientConnectedListener;
     @Nullable
-    protected NotificationListener<RouplexTcpClient> tcpClientRemovedListener;
+    protected NotificationListener<RouplexTcpClient> rouplexTcpClientClosedListener;
 
     // or isClosed, the same semantics
     private boolean isClosing;
@@ -76,14 +76,14 @@ public class RouplexTcpBinder implements Closeable {
             selectableChannel.configureBlocking(false);
 
             if (tcpChannel instanceof RouplexTcpClient) {
-                int interestOps = SelectionKey.OP_READ | SelectionKey.OP_WRITE;
+                int interestOps = SelectionKey.OP_WRITE;
                 boolean connected = ((SocketChannel) selectableChannel).isConnected();
                 if (!connected) {
                     interestOps |= SelectionKey.OP_CONNECT;
                 }
 
-                tcpChannel.setSelectionKey(
-                        selectableChannel.register(selector, interestOps, tcpChannel));
+                // Important moment where the client gets to update itself knowing is registered with the binder
+                tcpChannel.setSelectionKey(selectableChannel.register(selector, interestOps, tcpChannel));
 
                 if (connected) {
                     notifyConnectedTcpChannel(tcpChannel);
@@ -91,8 +91,7 @@ public class RouplexTcpBinder implements Closeable {
             }
 
             else if (tcpChannel instanceof RouplexTcpServer) {
-                tcpChannel.setSelectionKey(
-                        selectableChannel.register(selector, SelectionKey.OP_ACCEPT, tcpChannel));
+                tcpChannel.setSelectionKey(selectableChannel.register(selector, SelectionKey.OP_ACCEPT, tcpChannel));
             }
         } catch (Exception e) {
             // ClosedChannelException | IllegalBlockingModeException | RuntimeException from client.onEvent()
@@ -106,15 +105,15 @@ public class RouplexTcpBinder implements Closeable {
 
     // For channels that closed and need to report via binder
     void notifyConnectedTcpChannel(RouplexTcpChannel tcpChannel) throws IOException {
-        NotificationListener<RouplexTcpClient> tcpClientCreatedListener =
-                ((RouplexTcpClient) tcpChannel).createdRouplexTcpClientListener;
+        NotificationListener<RouplexTcpClient> rouplexTcpClientConnectedListener =
+                ((RouplexTcpClient) tcpChannel).rouplexTcpClientConnectedListener;
 
-        if (tcpClientCreatedListener != null) {
-            tcpClientCreatedListener.onEvent((RouplexTcpClient) tcpChannel);
+        if (rouplexTcpClientConnectedListener != null) {
+            rouplexTcpClientConnectedListener.onEvent((RouplexTcpClient) tcpChannel);
         }
 
-        if (tcpClientAddedListener != null) {
-            tcpClientAddedListener.onEvent((RouplexTcpClient) tcpChannel);
+        if (this.rouplexTcpClientConnectedListener != null) {
+            this.rouplexTcpClientConnectedListener.onEvent((RouplexTcpClient) tcpChannel);
         }
     }
 
@@ -241,8 +240,8 @@ public class RouplexTcpBinder implements Closeable {
                         if (closedChannels != null) {
                             for (RouplexTcpChannel closedChannel : closedChannels) {
                                 try {
-                                    if (tcpClientRemovedListener != null) {
-                                        tcpClientRemovedListener.onEvent((RouplexTcpClient) closedChannel);
+                                    if (rouplexTcpClientClosedListener != null) {
+                                        rouplexTcpClientClosedListener.onEvent((RouplexTcpClient) closedChannel);
                                     }
                                 } catch (Exception cce) {
                                     // channel is already closed
@@ -271,6 +270,7 @@ public class RouplexTcpBinder implements Closeable {
                                             continue;
                                         }
 
+                                        selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_CONNECT);
                                         notifyConnectedTcpChannel(rouplexTcpClient);
                                     } catch (IOException ioe) {
                                         closeTcpChannel(rouplexTcpClient); // async close, this may block
@@ -382,6 +382,13 @@ public class RouplexTcpBinder implements Closeable {
         }
     }
 
+    void resumeRead(SelectionKey selectionKey) {
+        synchronized (lock) {
+            resumingReads.put(selectionKey, 0L);
+        }
+        selector.wakeup();
+    }
+
     void pauseAccept(SelectionKey selectionKey, long resumeTimestamp) {
         synchronized (lock) {
             resumingAccepts.put(selectionKey, resumeTimestamp);
@@ -434,6 +441,7 @@ public class RouplexTcpBinder implements Closeable {
         }
     }
 
+    // In the future, if needed, we can support this
     Throttle throttle;
     public Throttle getTcpClientAcceptThrottle() {
         return throttle;
@@ -442,30 +450,30 @@ public class RouplexTcpBinder implements Closeable {
     /**
      * Whoever wants to know about added clients
      *
-     * @param tcpClientAddedListener
+     * @param rouplexTcpClientConnectedListener
      */
-    public void setRouplexTcpClientAddedListener(@Nullable NotificationListener<RouplexTcpClient> tcpClientAddedListener) {
+    public void setRouplexTcpClientConnectedListener(@Nullable NotificationListener<RouplexTcpClient> rouplexTcpClientConnectedListener) {
         synchronized (lock) {
-            if (this.tcpClientAddedListener != null) {
-                throw new IllegalStateException("RouplexTcpClientAddedListener already set.");
+            if (this.rouplexTcpClientConnectedListener != null) {
+                throw new IllegalStateException("RouplexTcpClientConnectedListener already set.");
             }
 
-            this.tcpClientAddedListener = tcpClientAddedListener;
+            this.rouplexTcpClientConnectedListener = rouplexTcpClientConnectedListener;
         }
     }
 
     /**
      * Whoever wants to know about removed clients
      *
-     * @param tcpClientRemovedListener
+     * @param rouplexTcpClientClosedListener
      */
-    public void setRouplexTcpClientRemovedListener(@Nullable NotificationListener<RouplexTcpClient> tcpClientRemovedListener) {
+    public void setRouplexTcpClientClosedListener(@Nullable NotificationListener<RouplexTcpClient> rouplexTcpClientClosedListener) {
         synchronized (lock) {
-            if (this.tcpClientRemovedListener != null) {
-                throw new IllegalStateException("RouplexTcpClientRemovedListener already set.");
+            if (this.rouplexTcpClientClosedListener != null) {
+                throw new IllegalStateException("RouplexTcpClientClosedListener already set.");
             }
 
-            this.tcpClientRemovedListener = tcpClientRemovedListener;
+            this.rouplexTcpClientClosedListener = rouplexTcpClientClosedListener;
         }
     }
 }

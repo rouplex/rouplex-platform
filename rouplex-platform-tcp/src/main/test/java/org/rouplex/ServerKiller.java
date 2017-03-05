@@ -18,7 +18,7 @@ public class ServerKiller {
 
         try {
             rouplexBinder = new RouplexTcpBinder(Selector.open(), null);
-            rouplexBinder.setRouplexTcpClientAddedListener(new NotificationListener<RouplexTcpClient>() {
+            rouplexBinder.setRouplexTcpClientConnectedListener(new NotificationListener<RouplexTcpClient>() {
                 @Override
                 public void onEvent(RouplexTcpClient rouplexTcpClient) {
                     try {

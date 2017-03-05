@@ -32,9 +32,9 @@ class RouplexTcpChannel implements Closeable {
     @Final // set in build() if not set
     protected SelectableChannel selectableChannel;
     @Final
-    protected NotificationListener<RouplexTcpClient> createdRouplexTcpClientListener;
+    protected NotificationListener<RouplexTcpClient> rouplexTcpClientConnectedListener;
     @Final
-    protected NotificationListener<RouplexTcpClient> failedCreatingRouplexTcpClientListener;
+    protected NotificationListener<RouplexTcpClient> rouplexTcpClientConnectionFailedListener;
 
     // not final, it is set from binder
     protected SelectionKey selectionKey;
@@ -94,19 +94,19 @@ class RouplexTcpChannel implements Closeable {
             return builder;
         }
 
-        public B withCreatedRouplexTcpClientListener(
-                NotificationListener<RouplexTcpClient> createdRouplexTcpClientListener) {
+        public B withRouplexTcpClientConnectedListener(
+                NotificationListener<RouplexTcpClient> rouplexTcpClientConnectedListener) {
             checkNotBuilt();
 
-            instance.createdRouplexTcpClientListener = createdRouplexTcpClientListener;
+            instance.rouplexTcpClientConnectedListener = rouplexTcpClientConnectedListener;
             return builder;
         }
 
-        public B withFailedCreatingRouplexTcpClientListener(
-                NotificationListener<RouplexTcpClient> failedCreatingRouplexTcpClientListener) {
+        public B withRouplexTcpClientConnectionFailedListener(
+                NotificationListener<RouplexTcpClient> rouplexTcpClientConnectionFailedListener) {
             checkNotBuilt();
 
-            instance.failedCreatingRouplexTcpClientListener = failedCreatingRouplexTcpClientListener;
+            instance.rouplexTcpClientConnectionFailedListener = rouplexTcpClientConnectionFailedListener;
             return builder;
         }
         public B withAttachment(@Nullable Object attachment) {
@@ -129,6 +129,11 @@ class RouplexTcpChannel implements Closeable {
         }
     }
 
+    /**
+     * This method is called from {@link RouplexTcpBinder} when the binder registers this channel.
+     *
+     * @param selectionKey
+     */
     void setSelectionKey(SelectionKey selectionKey) {
         this.selectionKey = selectionKey;
     }

@@ -126,7 +126,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
             }
 
             // No worries here since spurious pauseReads collapse and get handled as one by the rouplexTcpBinder thread
-            rouplexTcpBinder.pauseRead(selectionKey, 0);
+            rouplexTcpBinder.resumeRead(selectionKey);
         }
 
         boolean consumeSocketInput(byte[] payload) {
@@ -196,37 +196,37 @@ public class RouplexTcpClient extends RouplexTcpChannel {
                     eosReceived = true;
                 }
 
+                else if (paused || !payload.hasRemaining()) { // don't remove else keyword!
+                    return paused;
+                }
+
                 paused = remaining < payload.remaining();
                 writeSize = (int) (paused ? remaining : payload.remaining());
                 remaining -= writeSize;
             }
 
             ByteBuffer writeBuffer;
-            if (writeSize > 0) {
+            if (payload != EOS) {
                 // potentially costly operations in this block so we must perform outside the lock space especially
                 // since the removeWriteBuffer is performed from the RouplexTcpBinder's single thread responsible to go
                 // over all the channels monitored!!!
                 writeBuffer = ByteBuffer.allocate(writeSize);
                 transfer(payload, writeBuffer);
                 writeBuffer.flip();
-            } else if (payload == EOS) {
-                writeBuffer = EOS;
             } else {
-                writeBuffer = null;
+                writeBuffer = EOS;
             }
+
+            synchronized (lock) {
+                writeBuffers.add(writeBuffer);
+            }
+
+            rouplexTcpBinder.addInterestOps(selectionKey, SelectionKey.OP_WRITE);
 
             // This section may seem weird, but we don't want to fire pause() before copying any of the content from
             // payload to writeBuffer first.
             if (paused && throttle != null) {
                 throttle.pause(); // caller's thread, no need for try/catch protection
-            }
-
-            if (writeBuffer != null) {
-                synchronized (lock) {
-                    writeBuffers.add(writeBuffer);
-                }
-
-                rouplexTcpBinder.addInterestOps(selectionKey, SelectionKey.OP_WRITE);
             }
 
             return !paused;
@@ -250,7 +250,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
                 }
             }
 
-            if (fromPaused) {
+            if (fromPaused && throttle != null) {
                 throttle.resume();
             }
 
@@ -290,9 +290,9 @@ public class RouplexTcpClient extends RouplexTcpChannel {
     }
 
     protected SocketAddress remoteAddress;
-    final ThrottledSender throttledSender = new ThrottledSender();
-    final ThrottledReceiver throttledReceiver = new ThrottledReceiver();
-    final RouplexTcpServer rouplexTcpServer;
+    protected ThrottledSender throttledSender;
+    protected ThrottledReceiver throttledReceiver;
+    protected RouplexTcpServer rouplexTcpServer;
     boolean creationComplete;
 
     RouplexTcpClient(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder, RouplexTcpServer rouplexTcpServer) {
@@ -317,11 +317,21 @@ public class RouplexTcpClient extends RouplexTcpChannel {
         rouplexTcpBinder.registerTcpChannelAsync(this);
     }
 
+    @Override
+    void setSelectionKey(SelectionKey selectionKey) {
+        synchronized (lock) {
+            super.setSelectionKey(selectionKey);
+
+            throttledSender = new ThrottledSender();
+            throttledReceiver = new ThrottledReceiver();
+        }
+    }
+
     private RouplexTcpClient connect() throws IOException {
         init();
 
-        createdRouplexTcpClientListener = new NotificationForwarder(createdRouplexTcpClientListener);
-        failedCreatingRouplexTcpClientListener = new NotificationForwarder(failedCreatingRouplexTcpClientListener);
+        rouplexTcpClientConnectedListener = new NotificationForwarder(rouplexTcpClientConnectedListener);
+        rouplexTcpClientConnectionFailedListener = new NotificationForwarder(rouplexTcpClientConnectionFailedListener);
 
         rouplexTcpBinder.registerTcpChannelAsync(this);
 
@@ -370,13 +380,17 @@ public class RouplexTcpClient extends RouplexTcpChannel {
      * @return
      *          The throttle construct which the receiver can use to throttle the flow of receiving bits.
      */
-    public Throttle hookReceiveChannel(@Nullable ReceiveChannel<byte[]> receiveChannel) {
+    public Throttle hookReceiveChannel(@Nullable ReceiveChannel<byte[]> receiveChannel, boolean started) {
         synchronized (lock) {
             if (throttledReceiver.receiveChannel != null) {
                 throw new IllegalStateException("Receive channel already hooked.");
             }
 
             throttledReceiver.receiveChannel = receiveChannel;
+            if (started) {
+                throttledReceiver.resume();
+            }
+
             return throttledReceiver;
         }
     }
