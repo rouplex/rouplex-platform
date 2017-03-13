@@ -6,8 +6,8 @@ import java.util.*;
 
 /**
  * A map like structure (which can be made to implement Map) providing an iterator over its entries sorted by value.
- * This implementation is not thread safe. Please check {@link org.rouplex.commons.concurrency.Synchronized}
- * synchronized (sine in the common use case we expect the synchronization to
+ * This implementation is not thread safe. Please check {@link org.rouplex.commons.concurrency.Synchronized} for a
+ * thread safe wrapper/implementation.
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
@@ -28,57 +28,46 @@ public class SortedByValueMap<K, V> {
         return oldValue;
     }
 
-    public V remove(K key) {
-        return removeOldValue(key, keyValue.remove(key));
-    }
-
     public Iterable<Map.Entry<K, V>> sortedByValue() {
         return new Iterable<Map.Entry<K, V>>() {
             @Override
             public Iterator<Map.Entry<K, V>> iterator() {
                 return new Iterator<Map.Entry<K, V>>() {
+                    int remaining = keyValue.size();
                     final Iterator<Map.Entry<V, Set<K>>> entries = orderedByValue.entrySet().iterator();
                     Map.Entry<V, Set<K>> currentEntry;
                     Iterator<K> keys;
                     Map.Entry<K, V> current;
-                    Map.Entry<K, V> next;
 
                     {
                         if (entries.hasNext()) {
                             currentEntry = entries.next();
                             keys = currentEntry.getValue().iterator();
-                            locateNext();
                         }
                     }
 
-                    void locateNext() {
+                    @Override
+                    public boolean hasNext() {
+                        return remaining > 0;
+                    }
+
+                    @Override
+                    public Map.Entry<K, V> next() {
+                        if (remaining == 0) {
+                            throw new NoSuchElementException();
+                        }
+
                         while (!keys.hasNext()) {
                             currentEntry = entries.hasNext() ? entries.next() : null;
                             if (currentEntry == null) {
-                                next = null;
-                                return;
+                                throw new ConcurrentModificationException();
                             }
 
                             keys = currentEntry.getValue().iterator();
                         }
 
-                        next = new MapEntry<K, V>(keys.next(), currentEntry.getKey());
-                    }
-
-                    @Override
-                    public boolean hasNext() {
-                        return next != null;
-                    }
-
-                    @Override
-                    public Map.Entry<K, V> next() {
-                        if (next == null) {
-                            throw new NoSuchElementException();
-                        }
-
-                        current = next;
-                        locateNext();
-                        return current;
+                        remaining--;
+                        return current = new MapEntry<K, V>(keys.next(), currentEntry.getKey());
                     }
 
                     @Override
@@ -87,7 +76,13 @@ public class SortedByValueMap<K, V> {
                             throw new IllegalStateException();
                         }
 
-                        SortedByValueMap.this.remove(current.getKey());
+                        keys.remove();
+
+                        if (currentEntry.getValue().isEmpty()) {
+                            entries.remove();
+                        }
+
+                        keyValue.remove(current.getKey());
                     }
                 };
             }

@@ -9,12 +9,14 @@ import java.io.IOException;
  */
 public interface SendChannel<T> {
     /**
-     * Send the payload
+     * Send the payload. This is a non blocking call, and the payload type T must provide a way to expose the amount
+     * of the data sent.
      *
      * @param payload
-     *          The payload
-     * @return
-     *          True if the payload was sent fully
+     *          The payload to be sent.
+     * @throws IOException
+     *          If this channel is closed (either by a previous call {@link #send(Object)} with null as parameter or by
+     *          an underlying network problem which had (or just) caused this channel to close)
      */
-    boolean send(T payload) throws IOException;
+    void send(T payload) throws IOException;
 }

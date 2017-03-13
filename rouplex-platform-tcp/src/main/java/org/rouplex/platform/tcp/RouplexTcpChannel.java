@@ -41,6 +41,8 @@ class RouplexTcpChannel implements Closeable {
     // not final, set and changed by user
     protected Object attachment;
 
+    protected boolean isClosed;
+
     RouplexTcpChannel(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder) {
         this.selectableChannel = selectableChannel;
         this.rouplexTcpBinder = rouplexTcpBinder;
@@ -139,7 +141,9 @@ class RouplexTcpChannel implements Closeable {
     }
 
     SelectableChannel getSelectableChannel() {
-        return selectableChannel;
+        synchronized (lock) {
+            return selectableChannel;
+        }
     }
 
     @Override
@@ -149,6 +153,7 @@ class RouplexTcpChannel implements Closeable {
                 return;
             }
 
+            isClosed = true;
             IOException pendingIOException = null;
 
             try {
@@ -159,7 +164,7 @@ class RouplexTcpChannel implements Closeable {
 
             if (rouplexTcpBinder != null) {
                 try {
-                    rouplexTcpBinder.notifyClosedTcpChannelAsync(this);
+                    rouplexTcpBinder.asyncNotifyClosedTcpChannel(this);
                 } catch (IOException ioe) {
                     if (pendingIOException == null) {
                         pendingIOException = ioe;
@@ -177,9 +182,16 @@ class RouplexTcpChannel implements Closeable {
         }
     }
 
+    void closeSilently() {
+        try {
+            close();
+        } catch (IOException ioe) {
+        }
+    }
+
     public boolean isClosed() {
         synchronized (lock) {
-            return !selectableChannel.isOpen();
+            return isClosed;
         }
     }
 

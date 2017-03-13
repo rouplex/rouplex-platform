@@ -9,6 +9,7 @@ import org.rouplex.platform.tcp.RouplexTcpBinder;
 import org.rouplex.platform.tcp.RouplexTcpClient;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.Selector;
 
 public class ServerKiller {
@@ -22,7 +23,7 @@ public class ServerKiller {
                 @Override
                 public void onEvent(RouplexTcpClient rouplexTcpClient) {
                     try {
-                        rouplexTcpClient.hookSendChannel(null).send(null); // send EOS
+                        rouplexTcpClient.hookSendChannel(null).send(ByteBuffer.allocate(0)); // send EOS
                     } catch (IOException ioe) {
                         // handle it
                     }

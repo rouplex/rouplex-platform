@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit;
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class RouplexTcpClient extends RouplexTcpChannel {
-    private static final ByteBuffer EOS = ByteBuffer.allocate(0);
+    static final ByteBuffer EOS = ByteBuffer.allocate(0);
 
     public static class Builder extends RouplexTcpChannel.Builder<RouplexTcpClient, Builder> {
         Builder(RouplexTcpClient instance) {
@@ -85,10 +85,8 @@ public class RouplexTcpClient extends RouplexTcpChannel {
     }
 
     class ThrottledReceiver extends Throttle {
-        private final Object receiveLock = new Object();
-
-        private byte[] pendingReceive;
-        @Nullable private ReceiveChannel<byte[]> receiveChannel;
+        @Nullable
+        private ReceiveChannel<byte[]> receiveChannel;
         boolean eosReceived;
 
         private long rateLimitCurrentTimestamp;
@@ -106,30 +104,22 @@ public class RouplexTcpClient extends RouplexTcpChannel {
 
         @Override
         public boolean pause() {
-            rouplexTcpBinder.pauseRead(selectionKey, Long.MAX_VALUE); // 295 million years
+            rouplexTcpBinder.asyncPauseRead(selectionKey, Long.MAX_VALUE); // 295 million years
             return true;
         }
 
         @Override
         public void resume() {
-            synchronized (receiveLock) {
-                if (pendingReceive != null) {
-                    // the user will be called receive(byte[]) with this lock acquired but that is safe since this is
-                    // the only place the lock is used (and actually the only reason to have it is to protect from
-                    // competing resume() calls coming from user)
-                    if (!consumeSocketInput(pendingReceive)) {
-                        return;
-                    }
-
-                    pendingReceive = null;
-                }
-            }
-
-            // No worries here since spurious pauseReads collapse and get handled as one by the rouplexTcpBinder thread
-            rouplexTcpBinder.resumeRead(selectionKey);
+            rouplexTcpBinder.asyncResumeRead(selectionKey);
         }
 
         boolean consumeSocketInput(byte[] payload) {
+            boolean consumed = receiveChannel == null || receiveChannel.receive(payload);
+
+            if (payload == null) {
+                return true;
+            }
+
             if (rateLimitCurrentTimestamp != 0) {
                 if (System.currentTimeMillis() > rateLimitCurrentTimestamp) {
                     rateLimitCurrentTimestamp = System.currentTimeMillis() + rateLimitMillis;
@@ -137,31 +127,25 @@ public class RouplexTcpClient extends RouplexTcpChannel {
                 } else {
                     rateLimitCurrentBytes += payload.length;
                     if (rateLimitCurrentBytes > rateLimitBytes) {
-                        rouplexTcpBinder.pauseRead(selectionKey, rateLimitCurrentTimestamp);
+                        rouplexTcpBinder.asyncPauseRead(selectionKey, rateLimitCurrentTimestamp);
                     }
                 }
             }
 
-            if (receiveChannel != null) {
-                if (!receiveChannel.receive(payload.length == 0 ? null : payload)) {
-                    pendingReceive = payload;
-                    return false;
-                }
-            }
-
-            if (eosReceived = payload.length == 0) {
+            if (eosReceived = payload == RouplexTcpBinder.EOS) {
                 handleEos();
             }
 
-            return true;
+            return consumed;
         }
     }
 
     class ThrottledSender implements SendChannel<ByteBuffer> {
         private final LinkedList<ByteBuffer> writeBuffers = new LinkedList<ByteBuffer>();
-        private long writeBuffersCap = 1000000;
+        private long writeBuffersCap = 1024 * 1024;
         private long remaining = writeBuffersCap;
-        @Nullable Throttle throttle;
+        @Nullable
+        Throttle throttle;
         boolean paused;
         boolean eosReceived;
         boolean eosApplied;
@@ -183,21 +167,24 @@ public class RouplexTcpClient extends RouplexTcpChannel {
         }
 
         @Override
-        public boolean send(ByteBuffer payload) throws IOException {
+        public void send(ByteBuffer payload) throws IOException {
             int writeSize;
 
             synchronized (lock) {
-                if (eosReceived) {
-                    return false;
+                if (eosReceived || isClosed()) {
+                    throw new IOException("Sender is closed");
                 }
 
-                if (payload == null) {
+                if (payload == null) { // null is marker for client (abrupt) close
+                    close();
+                    return;
+                }
+
+                if (!payload.hasRemaining()) { // empty buffer is marker for channel (graceful) close
                     payload = EOS;
                     eosReceived = true;
-                }
-
-                else if (paused || !payload.hasRemaining()) { // don't remove else keyword!
-                    return paused;
+                } else if (paused) { // don't remove else keyword since we must always accept the EOS for delivery
+                    return;
                 }
 
                 paused = remaining < payload.remaining();
@@ -217,19 +204,24 @@ public class RouplexTcpClient extends RouplexTcpChannel {
                 writeBuffer = EOS;
             }
 
+            Throttle throttle;
             synchronized (lock) {
                 writeBuffers.add(writeBuffer);
+                throttle = paused ? this.throttle : null;
             }
 
-            rouplexTcpBinder.addInterestOps(selectionKey, SelectionKey.OP_WRITE);
+            rouplexTcpBinder.asyncResumeWrite(selectionKey);
 
-            // This section may seem weird, but we don't want to fire pause() before copying any of the content from
-            // payload to writeBuffer first.
-            if (paused && throttle != null) {
-                throttle.pause(); // caller's thread, no need for try/catch protection
+            if (throttle != null) {
+                try {
+                    // todo, pause / resume order not guaranteed here, options include (in order of preference)
+                    // (1) fire it off the binder's thread, (2) remove the pause() since the caller's hasRemaining
+                    // would imply the pause, or (3) fire them from within the locked space (at risk of deadlocks)
+                    throttle.pause();
+                } catch (RuntimeException re) {
+                    closeSilently();
+                }
             }
-
-            return !paused;
         }
 
         ByteBuffer pollFirstWriteBuffer() {
@@ -239,18 +231,21 @@ public class RouplexTcpClient extends RouplexTcpChannel {
         }
 
         void removeWriteBuffer(ByteBuffer writeBuffer) {
-            boolean fromPaused;
+            Throttle throttle;
 
             synchronized (lock) {
                 writeBuffers.remove(writeBuffer);
                 remaining += writeBuffer.limit();
 
-                if (fromPaused = paused) { // assignment, not comparison
+                if (paused) {
                     paused = false;
+                    throttle = this.throttle;
+                } else {
+                    throttle = null;
                 }
             }
 
-            if (fromPaused && throttle != null) {
+            if (throttle != null) {
                 throttle.resume();
             }
 
@@ -262,10 +257,8 @@ public class RouplexTcpClient extends RouplexTcpChannel {
     }
 
     private void handleEos() {
-        synchronized (lock) {
-            if (throttledSender.eosApplied && throttledReceiver.eosReceived) {
-                rouplexTcpBinder.closeTcpChannel(this);
-            }
+        if (throttledSender.eosApplied && throttledReceiver.eosReceived) {
+            closeSilently();
         }
     }
 
@@ -314,7 +307,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
 
     private void connectAsync() throws IOException {
         init();
-        rouplexTcpBinder.registerTcpChannelAsync(this);
+        rouplexTcpBinder.asyncRegisterTcpChannel(this);
     }
 
     @Override
@@ -333,7 +326,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
         rouplexTcpClientConnectedListener = new NotificationForwarder(rouplexTcpClientConnectedListener);
         rouplexTcpClientConnectionFailedListener = new NotificationForwarder(rouplexTcpClientConnectionFailedListener);
 
-        rouplexTcpBinder.registerTcpChannelAsync(this);
+        rouplexTcpBinder.asyncRegisterTcpChannel(this);
 
         synchronized (lock) {
             while (!creationComplete) {
@@ -351,14 +344,13 @@ public class RouplexTcpClient extends RouplexTcpChannel {
 
     /**
      * Hook (rather get) the channel which would be used to send bits.
-     *
+     * <p>
      * The provided throttle will be used by us, in case we need to pause the sends (writes) because the buffers
      * may fill up.
      *
      * @param throttle
-     *          A throttle construct which we would use to pause send requests
-     * @return
-     *          The channel to be used to send the bits.
+     *         A throttle construct which we would use to pause send requests
+     * @return The channel to be used to send the bits.
      */
     public SendChannel<ByteBuffer> hookSendChannel(Throttle throttle) {
         synchronized (lock) {
@@ -376,9 +368,8 @@ public class RouplexTcpClient extends RouplexTcpChannel {
      * The receiver can use the Throttle returned to notify us to pause (and then later, to resume).
      *
      * @param receiveChannel
-     *          The channel receiving the bits
-     * @return
-     *          The throttle construct which the receiver can use to throttle the flow of receiving bits.
+     *         The channel receiving the bits
+     * @return The throttle construct which the receiver can use to throttle the flow of receiving bits.
      */
     public Throttle hookReceiveChannel(@Nullable ReceiveChannel<byte[]> receiveChannel, boolean started) {
         synchronized (lock) {

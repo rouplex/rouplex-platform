@@ -30,14 +30,6 @@ public class Synchronized {
                     return source.put(key, value);
                 }
             }
-
-            @ThreadSafe
-            @Override
-            public V remove(K key) {
-                synchronized (lock) {
-                    return source.remove(key);
-                }
-            }
         };
     }
 }

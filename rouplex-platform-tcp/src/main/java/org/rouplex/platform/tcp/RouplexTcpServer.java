@@ -71,7 +71,7 @@ public class RouplexTcpServer extends RouplexTcpChannel {
         ServerSocketChannel serverSocketChannel = sslContext == null ? ServerSocketChannel.open() : SSLServerSocketChannel.open(sslContext);
         selectableChannel = serverSocketChannel;
         serverSocketChannel.bind(localAddress, backlog);
-        rouplexTcpBinder.registerTcpChannelAsync(this);
+        rouplexTcpBinder.asyncRegisterTcpChannel(this);
 
         return this;
     }
