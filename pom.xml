@@ -57,11 +57,11 @@
     </dependencies>
 
     <modules>
-        <module>commons</module>
-        <module>platform</module>
-        <module>platform-tcp</module>
-        <module>platform-jaxrs</module>
-        <module>platform-jaxrs-client</module>
-        <module>platform-jersey</module>
+        <module>rouplex-commons</module>
+        <module>rouplex-platform</module>
+        <module>rouplex-platform-tcp</module>
+        <module>rouplex-platform-jaxrs</module>
+        <module>rouplex-platform-jaxrs-client</module>
+        <module>rouplex-platform-jersey</module>
     </modules>
 </project>
