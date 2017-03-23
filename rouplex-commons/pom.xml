@@ -6,11 +6,20 @@
 
     <parent>
         <groupId>org.rouplex</groupId>
-        <artifactId>rouplex</artifactId>
-        <version>0.0-SNAPSHOT</version>
+        <artifactId>rouplex-platform-parent</artifactId>
+        <version>1.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>rouplex-commons</artifactId>
-    <version>0.0-SNAPSHOT</version>
+    <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
+
+    <dependencies>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.12</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 </project>

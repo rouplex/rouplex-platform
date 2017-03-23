@@ -11,9 +11,9 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.UnknownHostException;
+import java.nio.channels.NetworkChannel;
 import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
-import java.nio.channels.ServerSocketChannel;
 
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
@@ -127,7 +127,7 @@ class RouplexTcpChannel implements Closeable {
                 throw new IOException("Already closed");
             }
 
-            return selectableChannel == null ? localAddress : ((ServerSocketChannel) selectableChannel).getLocalAddress();
+            return selectableChannel == null ? localAddress : ((NetworkChannel) selectableChannel).getLocalAddress();
         }
     }
 

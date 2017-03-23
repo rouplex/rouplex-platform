@@ -2,6 +2,7 @@ package org.rouplex.platform.tcp;
 
 import org.rouplex.commons.annotations.Nullable;
 import org.rouplex.commons.collections.SortedByValueMap;
+import org.rouplex.nio.channels.spi.SSLSelector;
 import org.rouplex.platform.rr.NotificationListener;
 import org.rouplex.platform.rr.Throttle;
 
@@ -12,6 +13,7 @@ import java.nio.channels.*;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
@@ -23,7 +25,7 @@ public class RouplexTcpBinder implements Closeable {
     protected final Selector selector;
     protected final ExecutorService executorService;
     protected final boolean sharedExecutorService;
-    protected final int readBufferSize;
+    protected final ByteBuffer readBuffer;
 
     protected List<RouplexTcpChannel> registeringChannels = new ArrayList<RouplexTcpChannel>();
     protected List<RouplexTcpChannel> unregisteringChannels = new ArrayList<RouplexTcpChannel>();
@@ -37,22 +39,35 @@ public class RouplexTcpBinder implements Closeable {
     @Nullable
     protected NotificationListener<RouplexTcpClient> rouplexTcpClientClosedListener;
 
+    private static final ThreadFactory deamonThreadFactory = new ThreadFactory() {
+        @Override
+        public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable);
+            thread.setDaemon(true);
+            return thread;
+        }
+    };
+
     // or isClosed, the same semantics
     private boolean isClosing;
+
+    public RouplexTcpBinder() throws IOException {
+        this(SSLSelector.open());
+    }
 
     public RouplexTcpBinder(Selector selector) {
         this(selector, null);
     }
 
     public RouplexTcpBinder(Selector selector, ExecutorService executorService) {
-        this(selector, null, 1024 * 1024);
+        this(selector, executorService, 1024 * 1024);
     }
 
     public RouplexTcpBinder(Selector selector, ExecutorService executorService, int readBufferSize) {
         this.selector = selector; // this will be a little trickier with ssl, punting for now
         this.executorService = (sharedExecutorService = executorService != null)
-                ? executorService : Executors.newCachedThreadPool();
-        this.readBufferSize = readBufferSize;
+                ? executorService : Executors.newCachedThreadPool(deamonThreadFactory);
+        readBuffer = ByteBuffer.allocate(readBufferSize);
 
         start();
     }
@@ -202,7 +217,6 @@ public class RouplexTcpBinder implements Closeable {
             public void run() {
                 Thread currentThread = Thread.currentThread();
                 currentThread.setName("Rouplex-Platform-TcpBinder");
-                ByteBuffer readBuffer = ByteBuffer.allocate(readBufferSize);
 
                 try {
                     while (true) {
@@ -253,112 +267,117 @@ public class RouplexTcpBinder implements Closeable {
                         selector.select(selectTimeout);
 
                         for (SelectionKey selectionKey : selector.selectedKeys()) {
-                            try {
-                                if (selectionKey.isAcceptable()) {
-                                    SocketChannel socketChannel = ((ServerSocketChannel) selectionKey.channel()).accept();
-                                    registerTcpChannel(new RouplexTcpClient(socketChannel, RouplexTcpBinder.this,
-                                            (RouplexTcpServer) selectionKey.attachment()));
-                                    continue;
-                                }
-
-                                SocketChannel socketChannel = ((SocketChannel) selectionKey.channel());
-                                RouplexTcpClient rouplexTcpClient = (RouplexTcpClient) selectionKey.attachment();
-
-                                if (selectionKey.isConnectable()) {
-                                    try {
-                                        if (!socketChannel.finishConnect()) {
-                                            continue;
-                                        }
-
-                                        selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_CONNECT);
-                                        notifyConnectedTcpClient(rouplexTcpClient);
-                                    } catch (Exception e) {
-                                        // IOException | RuntimeException (from client handling notification)
-                                        rouplexTcpClient.closeSilently();
-                                        continue;
-                                    }
-                                }
-
-                                if (selectionKey.isReadable()) {
-                                    int read = 0;
-                                    try {
-                                        if ((read = socketChannel.read(readBuffer)) != 0) {
-                                            byte[] readPayload;
-
-                                            switch (read) {
-                                                case -1:
-                                                    readPayload = EOS;
-                                                    break;
-                                                default:
-                                                    readPayload = new byte[read];
-                                                    System.arraycopy(readBuffer.array(), 0, readPayload, 0, readBuffer.position());
-                                                    readBuffer.clear();
-                                            }
-
-                                            if (!rouplexTcpClient.throttledReceiver.consumeSocketInput(readPayload) || read == -1) {
-                                                selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_READ);
-                                            }
-                                        }
-                                    } catch (Exception e) {
-                                        // IOException | RuntimeException (from client handling received bytes)
-                                        if (read == 0) { // tricky way to test if exception generated during read()
-                                            try {
-                                                rouplexTcpClient.throttledReceiver.consumeSocketInput(null);
-                                            } catch (RuntimeException re) {
-                                                // fall through
-                                            }
-                                        }
-                                        rouplexTcpClient.closeSilently();
-                                        continue;
-                                    }
-                                }
-
-                                if (selectionKey.isWritable()) {
-                                    while (true) {
-                                        ByteBuffer writeBuffer = rouplexTcpClient.throttledSender.pollFirstWriteBuffer();
-
-                                        if (writeBuffer == null) { // nothing in the queue
-                                            selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_WRITE);
-                                            break;
-                                        }
-
-                                        boolean eos = !writeBuffer.hasRemaining(); // empty buffer is "marker for EOS"
-                                        try {
-                                            if (eos) {
-                                                socketChannel.shutdownOutput();
-                                            } else {
-                                                socketChannel.write(writeBuffer);
-                                                if (writeBuffer.hasRemaining()) {
-                                                    break;
-                                                }
-                                            }
-
-                                            rouplexTcpClient.throttledSender.removeWriteBuffer(writeBuffer);
-                                        } catch (Exception e) {
-                                            // IOException | RuntimeException (from client handling resume)
-                                            rouplexTcpClient.closeSilently();
-                                            break;
-                                        }
-
-                                        if (eos) {
-                                            break;
-                                        }
-                                    }
-                                }
-                            } catch (Exception e) {
-                                // Normally we should check selectionKey.isValid() before any access, and since all ops
-                                // are synchronous, the condition would hold between various instructions. It is easier
-                                // to just catch here and loop to next key though since the try/catch is needed anyways
-                            }
+                            handleSelectedKey(selectionKey);
                         }
                     }
-                } catch (IOException ioe) {
+                } catch (Exception ioe) { // aaa
+                    ioe.printStackTrace();
                     // something major, close the binder
                 }
 
                 syncClose(); // close synchronously.
             }
         });
+    }
+
+    private void handleSelectedKey(SelectionKey selectionKey) {
+        try {
+            if (selectionKey.isAcceptable()) {
+                SocketChannel socketChannel = ((ServerSocketChannel) selectionKey.channel()).accept();
+                registerTcpChannel(new RouplexTcpClient(socketChannel, RouplexTcpBinder.this,
+                        (RouplexTcpServer) selectionKey.attachment()));
+                return;
+            }
+
+            SocketChannel socketChannel = ((SocketChannel) selectionKey.channel());
+            RouplexTcpClient rouplexTcpClient = (RouplexTcpClient) selectionKey.attachment();
+
+            if (selectionKey.isConnectable()) {
+                try {
+                    if (!socketChannel.finishConnect()) {
+                        return;
+                    }
+
+                    selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_CONNECT);
+                    notifyConnectedTcpClient(rouplexTcpClient);
+                } catch (Exception e) {
+                    // IOException | RuntimeException (from client handling notification)
+                    rouplexTcpClient.closeSilently();
+                    return;
+                }
+            }
+
+            if (selectionKey.isReadable()) {
+                int read = 0;
+                try {
+                    if ((read = socketChannel.read(readBuffer)) != 0) {
+                        byte[] readPayload;
+
+                        switch (read) {
+                            case -1:
+                                readPayload = EOS;
+                                break;
+                            default:
+                                readPayload = new byte[read];
+                                System.arraycopy(readBuffer.array(), 0, readPayload, 0, readBuffer.position());
+                                readBuffer.clear();
+                        }
+
+                        if (!rouplexTcpClient.throttledReceiver.consumeSocketInput(readPayload) || read == -1) {
+                            selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_READ);
+                        }
+                    }
+                } catch (Exception e) {
+                    // IOException | RuntimeException (from client handling received bytes)
+                    if (read == 0) { // tricky way to test if exception generated during read()
+                        try {
+                            rouplexTcpClient.throttledReceiver.consumeSocketInput(null);
+                        } catch (RuntimeException re) {
+                            // fall through
+                        }
+                    }
+                    rouplexTcpClient.closeSilently();
+                    return;
+                }
+            }
+
+            if (selectionKey.isWritable()) {
+                while (true) {
+                    ByteBuffer writeBuffer = rouplexTcpClient.throttledSender.pollFirstWriteBuffer();
+
+                    if (writeBuffer == null) { // nothing in the queue
+                        selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_WRITE);
+                        break;
+                    }
+
+                    boolean eos = !writeBuffer.hasRemaining(); // empty buffer is "marker for EOS"
+                    try {
+                        if (eos) {
+                            socketChannel.shutdownOutput();
+                        } else {
+                            socketChannel.write(writeBuffer);
+                            if (writeBuffer.hasRemaining()) {
+                                break;
+                            }
+                        }
+
+                        rouplexTcpClient.throttledSender.removeWriteBuffer(writeBuffer);
+                    } catch (Exception e) {
+                        // IOException | RuntimeException (from client handling resume)
+                        rouplexTcpClient.closeSilently();
+                        break;
+                    }
+
+                    if (eos) {
+                        break;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Normally we should check selectionKey.isValid() before any access, and since all ops
+            // are synchronous, the condition would hold between various instructions. It is easier
+            // to just catch here and loop to next key though since the try/catch is needed anyways
+        }
     }
 
     private void asyncRemoveInterestOps(SelectionKey selectionKey, int interestOps) {

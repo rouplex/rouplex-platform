@@ -5,8 +5,8 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.rouplex</groupId>
-    <artifactId>rouplex</artifactId>
-    <version>0.0-SNAPSHOT</version>
+    <artifactId>rouplex-platform-parent</artifactId>
+    <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <properties>
@@ -15,16 +15,6 @@
 
     <build>
         <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.5.1</version>
-                <configuration>
-                    <source>1.6</source>
-                    <target>1.6</target>
-                </configuration>
-            </plugin>
-
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
@@ -36,30 +26,33 @@
                             <goal>analyze-only</goal>
                         </goals>
                         <configuration>
-                            <ignoredUnusedDeclaredDependencies>
-                                <ignoredUnusedDeclaredDependency>org.webjars:swagger-ui</ignoredUnusedDeclaredDependency>
-                            </ignoredUnusedDeclaredDependencies>
                             <failOnWarning>false</failOnWarning>
                         </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.0.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>
         </plugins>
     </build>
 
-    <dependencies>
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.12</version>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
-
     <modules>
         <module>rouplex-commons</module>
         <module>rouplex-platform</module>
         <module>rouplex-platform-tcp</module>
+        <module>rouplex-platform-tcp-instrumentor</module>
         <module>rouplex-platform-jaxrs</module>
         <module>rouplex-platform-jaxrs-client</module>
         <module>rouplex-platform-jersey</module>

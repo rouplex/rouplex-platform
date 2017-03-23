@@ -6,31 +6,31 @@
 
     <parent>
         <groupId>org.rouplex</groupId>
-        <artifactId>rouplex</artifactId>
-        <version>0.0-SNAPSHOT</version>
+        <artifactId>rouplex-platform-parent</artifactId>
+        <version>1.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>rouplex-platform-jersey</artifactId>
-    <version>0.0-SNAPSHOT</version>
+    <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <dependencies>
         <dependency>
             <groupId>org.rouplex</groupId>
             <artifactId>rouplex-commons</artifactId>
-            <version>0.0-SNAPSHOT</version>
+            <version>1.0-SNAPSHOT</version>
         </dependency>
 
         <dependency>
             <groupId>org.rouplex</groupId>
             <artifactId>rouplex-platform</artifactId>
-            <version>0.0-SNAPSHOT</version>
+            <version>1.0-SNAPSHOT</version>
         </dependency>
 
         <dependency>
             <groupId>org.rouplex</groupId>
             <artifactId>rouplex-platform-jaxrs</artifactId>
-            <version>0.0-SNAPSHOT</version>
+            <version>1.0-SNAPSHOT</version>
         </dependency>
 
         <dependency>

@@ -15,10 +15,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectableChannel;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.SocketChannel;
+import java.nio.channels.*;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.LinkedList;
@@ -308,6 +305,16 @@ public class RouplexTcpClient extends RouplexTcpChannel {
     private void connectAsync() throws IOException {
         init();
         rouplexTcpBinder.asyncRegisterTcpChannel(this);
+    }
+
+    public SocketAddress getRemoteAddress() throws IOException {
+        synchronized (lock) {
+            if (isClosed()) {
+                throw new IOException("Already closed");
+            }
+
+            return selectableChannel == null ? remoteAddress : ((SocketChannel) selectableChannel).getRemoteAddress();
+        }
     }
 
     @Override
