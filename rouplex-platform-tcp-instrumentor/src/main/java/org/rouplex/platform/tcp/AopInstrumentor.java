@@ -1,29 +1,50 @@
 package org.rouplex.platform.tcp;
 
-import com.codahale.metrics.Meter;
-import com.codahale.metrics.MetricRegistry;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 
+import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.Logger;
 
 @Aspect
 public class AopInstrumentor {
-    Map<RouplexTcpBinder, RouplexTcpBinderReporter> socketChannelReporters
+    static Map<RouplexTcpBinder, RouplexTcpBinderReporter> tcpBinders
             = new ConcurrentHashMap<RouplexTcpBinder, RouplexTcpBinderReporter>();
+    static Map<RouplexTcpClient, RouplexTcpClientReporter> tcpClients
+            = new ConcurrentHashMap<RouplexTcpClient, RouplexTcpClientReporter>();
+
+    static Field throttledSenderField;
+    static {
+        try {
+            throttledSenderField = RouplexTcpClient.ThrottledSender.class.getDeclaredField("this$0");
+            throttledSenderField.setAccessible(true);
+        } catch (Exception e) {
+        }
+    }
 
     RouplexTcpBinderReporter getRouplexTcpBinderReporter(ProceedingJoinPoint pjp) {
-        RouplexTcpBinder socketChannel = ((RouplexTcpBinder) pjp.getThis());
-        RouplexTcpBinderReporter socketChannelReporter = socketChannelReporters.get(socketChannel);
-        if (socketChannelReporter == null) {
-            socketChannelReporters.putIfAbsent(socketChannel, new RouplexTcpBinderReporter(socketChannel));
-            socketChannelReporter = socketChannelReporters.get(socketChannel);
+        RouplexTcpBinder tcpBinder = ((RouplexTcpBinder) pjp.getThis());
+        RouplexTcpBinderReporter tcpBinderReporter = tcpBinders.get(tcpBinder);
+        if (tcpBinderReporter == null) {
+            tcpBinders.putIfAbsent(tcpBinder, new RouplexTcpBinderReporter(tcpBinder));
+            tcpBinderReporter = tcpBinders.get(tcpBinder);
         }
 
-        return socketChannelReporter;
+        return tcpBinderReporter;
+    }
+
+    RouplexTcpClientReporter getRouplexTcpClientReporter(ProceedingJoinPoint pjp) throws Exception {
+        RouplexTcpClient.ThrottledSender throttledSender = ((RouplexTcpClient.ThrottledSender) pjp.getThis());
+        RouplexTcpClient tcpClient = (RouplexTcpClient) throttledSenderField.get(throttledSender);
+        RouplexTcpClientReporter tcpClientReporter = tcpClients.get(tcpClient);
+        if (tcpClientReporter == null) {
+            tcpClients.putIfAbsent(tcpClient, new RouplexTcpClientReporter(tcpClient));
+            tcpClientReporter = tcpClients.get(tcpClient);
+        }
+
+        return tcpClientReporter;
     }
 
     @Around("execution(* org.rouplex.platform.tcp.RouplexTcpBinder.handleSelectedKey(..))")
@@ -31,49 +52,8 @@ public class AopInstrumentor {
         return getRouplexTcpBinderReporter(pjp).handleSelectedKey(pjp);
     }
 
-    @Around("execution(* org.rouplex.platform.tcp.RouplexTcpBinder.kot(..))")
-    public Object kot(ProceedingJoinPoint pjp) throws Throwable {
-        System.out.println("plot");
-        return pjp.proceed();
-    }
-
-    static class RouplexTcpBinderReporter {
-        private static final Logger logger = Logger.getLogger(RouplexTcpBinderReporter.class.getSimpleName());
-        private static final MetricRegistry benchmarkerMetrics = new MetricRegistry();
-        public static final String format = "%s"; // [Hash]
-
-        final RouplexTcpBinder rouplexTcpBinder;
-
-        Meter handleSelectedKey;
-
-        String aggregatedId;
-        String completeId;
-
-        public RouplexTcpBinderReporter(RouplexTcpBinder rouplexTcpBinder) {
-            this.rouplexTcpBinder = rouplexTcpBinder;
-
-            updateId();
-
-            handleSelectedKey = benchmarkerMetrics.meter(MetricRegistry.name(aggregatedId, "handleSelectedKey"));
-        }
-
-        public Object handleSelectedKey(ProceedingJoinPoint pjp) throws Throwable {
-            Object result = pjp.proceed();
-
-            handleSelectedKey.mark();
-            logger.info(String.format("handleSelectedKey %s", completeId));
-            return result;
-        }
-
-        private void updateId() {
-            completeId = String.format(format,
-                    rouplexTcpBinder.hashCode());
-
-            aggregatedId = completeId;
-        }
-
-        public String getAggregatedId() {
-            return aggregatedId;
-        }
+    @Around("execution(* org.rouplex.platform.tcp.RouplexTcpClient.ThrottledSender.send(..))")
+    public Object throttledSenderSend(ProceedingJoinPoint pjp) throws Throwable {
+        return getRouplexTcpClientReporter(pjp).throttledSenderSend(pjp);
     }
 }

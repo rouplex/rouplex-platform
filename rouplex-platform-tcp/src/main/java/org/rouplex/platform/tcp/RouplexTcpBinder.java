@@ -374,6 +374,7 @@ public class RouplexTcpBinder implements Closeable {
                 }
             }
         } catch (Exception e) {
+            e.printStackTrace();
             // Normally we should check selectionKey.isValid() before any access, and since all ops
             // are synchronous, the condition would hold between various instructions. It is easier
             // to just catch here and loop to next key though since the try/catch is needed anyways

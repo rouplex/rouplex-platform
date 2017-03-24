@@ -46,6 +46,15 @@
                     <source>${jdk.version}</source>
                     <target>${jdk.version}</target>
                     <complianceLevel>${jdk.version}</complianceLevel>
+
+                    <!-- Target libraries containing the instrumented classes already compiled via javac -->
+                    <weaveDependencies>
+                        <weaveDependency>
+                            <groupId>org.rouplex</groupId>
+                            <artifactId>rouplex-platform-tcp</artifactId>
+                        </weaveDependency>
+                    </weaveDependencies>
+
                     <sources>
                         <source>
                             <basedir>${project.basedir}</basedir>
