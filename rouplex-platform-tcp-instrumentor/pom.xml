@@ -72,6 +72,20 @@
                         </goals>
                     </execution>
                 </executions>
+
+                <dependencies>
+                    <dependency>
+                        <groupId>org.aspectj</groupId>
+                        <artifactId>aspectjrt</artifactId>
+                        <version>1.8.9</version>
+                    </dependency>
+
+                    <dependency>
+                        <groupId>org.aspectj</groupId>
+                        <artifactId>aspectjtools</artifactId>
+                        <version>1.8.9</version>
+                    </dependency>
+                </dependencies>
             </plugin>
         </plugins>
     </build>
