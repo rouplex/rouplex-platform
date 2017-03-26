@@ -1,5 +1,7 @@
 package org.rouplex.platform.tcp;
 
+import com.codahale.metrics.JmxReporter;
+import com.codahale.metrics.MetricRegistry;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -7,14 +9,10 @@ import org.aspectj.lang.annotation.Aspect;
 import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 @Aspect
 public class AopInstrumentor {
-    static Map<RouplexTcpBinder, RouplexTcpBinderReporter> tcpBinders
-            = new ConcurrentHashMap<RouplexTcpBinder, RouplexTcpBinderReporter>();
-    static Map<RouplexTcpClient, RouplexTcpClientReporter> tcpClients
-            = new ConcurrentHashMap<RouplexTcpClient, RouplexTcpClientReporter>();
-
     static Field throttledSenderField;
     static {
         try {
@@ -24,11 +22,18 @@ public class AopInstrumentor {
         }
     }
 
+    final AopConfig aopConfig = AopConfig.allAggregated();
+    final MetricRegistry metricRegistry = new MetricRegistry();
+    final Map<RouplexTcpBinder, RouplexTcpBinderReporter> tcpBinders
+            = new ConcurrentHashMap<RouplexTcpBinder, RouplexTcpBinderReporter>();
+    final Map<RouplexTcpClient, RouplexTcpClientReporter> tcpClients
+            = new ConcurrentHashMap<RouplexTcpClient, RouplexTcpClientReporter>();
+
     RouplexTcpBinderReporter getRouplexTcpBinderReporter(ProceedingJoinPoint pjp) {
         RouplexTcpBinder tcpBinder = ((RouplexTcpBinder) pjp.getThis());
         RouplexTcpBinderReporter tcpBinderReporter = tcpBinders.get(tcpBinder);
         if (tcpBinderReporter == null) {
-            tcpBinders.putIfAbsent(tcpBinder, new RouplexTcpBinderReporter(tcpBinder));
+            tcpBinders.putIfAbsent(tcpBinder, new RouplexTcpBinderReporter(tcpBinder, this));
             tcpBinderReporter = tcpBinders.get(tcpBinder);
         }
 
@@ -40,11 +45,19 @@ public class AopInstrumentor {
         RouplexTcpClient tcpClient = (RouplexTcpClient) throttledSenderField.get(throttledSender);
         RouplexTcpClientReporter tcpClientReporter = tcpClients.get(tcpClient);
         if (tcpClientReporter == null) {
-            tcpClients.putIfAbsent(tcpClient, new RouplexTcpClientReporter(tcpClient));
+            tcpClients.putIfAbsent(tcpClient, new RouplexTcpClientReporter(tcpClient, this));
             tcpClientReporter = tcpClients.get(tcpClient);
         }
 
         return tcpClientReporter;
+    }
+
+    AopInstrumentor() {
+        JmxReporter.forRegistry(metricRegistry)
+                .convertRatesTo(TimeUnit.SECONDS)
+                .convertDurationsTo(TimeUnit.MILLISECONDS)
+                .build()
+                .start();
     }
 
     @Around("execution(* org.rouplex.platform.tcp.RouplexTcpBinder.handleSelectedKey(..))")

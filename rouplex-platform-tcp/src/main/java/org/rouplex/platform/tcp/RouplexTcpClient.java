@@ -139,8 +139,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
 
     class ThrottledSender implements SendChannel<ByteBuffer> {
         private final LinkedList<ByteBuffer> writeBuffers = new LinkedList<ByteBuffer>();
-        private long writeBuffersCap = 1024 * 1024;
-        private long remaining = writeBuffersCap;
+        private long remaining = sendBufferSize != 0 ? sendBufferSize : 256 * 1024;
         @Nullable
         Throttle throttle;
         boolean paused;
@@ -158,7 +157,10 @@ public class RouplexTcpClient extends RouplexTcpChannel {
                 source.limit(limit);
                 return destRemaining;
             } else {
-                destination.put(source);
+                if (source.hasRemaining()) {
+                    destination.put(source);
+                }
+
                 return srcRemaining;
             }
         }
@@ -297,6 +299,13 @@ public class RouplexTcpClient extends RouplexTcpChannel {
         }
 
         SocketChannel socketChannel = sslContext == null ? SocketChannel.open() : SSLSocketChannel.open(sslContext);
+        if (sendBufferSize != 0) {
+            socketChannel.socket().setSendBufferSize(sendBufferSize);
+        }
+        if (receiveBufferSize != 0) {
+            socketChannel.socket().setReceiveBufferSize(receiveBufferSize);
+        }
+
         selectableChannel = socketChannel;
         socketChannel.configureBlocking(false);
         socketChannel.connect(remoteAddress);

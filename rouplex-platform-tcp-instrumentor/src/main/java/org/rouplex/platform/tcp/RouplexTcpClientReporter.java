@@ -15,11 +15,11 @@ import java.util.logging.Logger;
  */
 class RouplexTcpClientReporter {
     private static final Logger logger = Logger.getLogger(RouplexTcpClientReporter.class.getSimpleName());
-    private static final MetricRegistry benchmarkerMetrics = new MetricRegistry();
     public static final String format = "%s.%s:%s::%s:%s";
     // [Client,Server].[Local]:[Port]::[Remote]:[Port]
 
     final RouplexTcpClient rouplexTcpClient;
+    final AopInstrumentor aopInstrumentor;
 
     String actor;
 
@@ -42,8 +42,9 @@ class RouplexTcpClientReporter {
     String aggregatedId;
     String completeId;
 
-    public RouplexTcpClientReporter(RouplexTcpClient rouplexTcpClient) {
+    public RouplexTcpClientReporter(RouplexTcpClient rouplexTcpClient, AopInstrumentor aopInstrumentor) {
         this.rouplexTcpClient = rouplexTcpClient;
+        this.aopInstrumentor = aopInstrumentor;
 
         try {
             InetSocketAddress inetSocketAddress = (InetSocketAddress) rouplexTcpClient.getRemoteAddress();
@@ -61,7 +62,7 @@ class RouplexTcpClientReporter {
             Field field = SSLSocketChannelImpl.class.getDeclaredField("clientMode");
             field.setAccessible(true);
             boolean clientMode = (boolean) field.get(rouplexTcpClient.getSelectableChannel());
-            actor = clientMode ? "Client" : "Server";
+            actor = clientMode ? "RouplexTcpClient" : "RouplexTcpServer";
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -106,18 +107,26 @@ class RouplexTcpClientReporter {
                 remotePort
         );
 
-        aggregatedId = completeId;
+        AopConfig aopConfig = aopInstrumentor.aopConfig;
+        aggregatedId = String.format(format,
+                actor,
+                aopConfig.aggregateLocalAddresses ? "A" : localAddress,
+                aopConfig.aggregateLocalPorts? "A" : localPort,
+                aopConfig.aggregateRemoteAddresses ? "A" : remoteAddress,
+                aopConfig.aggregateRemotePorts ? "A" : remotePort
+        );
 
-        sentBytes = benchmarkerMetrics.meter(MetricRegistry.name(aggregatedId, "sentBytes"));
-        unsentBytes = benchmarkerMetrics.meter(MetricRegistry.name(aggregatedId, "unsentBytes"));
-        innerSentBytes = benchmarkerMetrics.meter(MetricRegistry.name(aggregatedId, "innerSentBytes"));
-        sentEos = benchmarkerMetrics.meter(MetricRegistry.name(aggregatedId, "sentEos"));
-        innerSentEos = benchmarkerMetrics.meter(MetricRegistry.name(aggregatedId, "innerSentEos"));
-        sentDisconnect = benchmarkerMetrics.meter(MetricRegistry.name(aggregatedId, "sentDisconnect"));
+        MetricRegistry metricRegistry = aopInstrumentor.metricRegistry;
+        sentBytes = metricRegistry.meter(MetricRegistry.name(aggregatedId, "sentBytes"));
+        unsentBytes = metricRegistry.meter(MetricRegistry.name(aggregatedId, "unsentBytes"));
+        innerSentBytes = metricRegistry.meter(MetricRegistry.name(aggregatedId, "innerSentBytes"));
+        sentEos = metricRegistry.meter(MetricRegistry.name(aggregatedId, "sentEos"));
+        innerSentEos = metricRegistry.meter(MetricRegistry.name(aggregatedId, "innerSentEos"));
+        sentDisconnect = metricRegistry.meter(MetricRegistry.name(aggregatedId, "sentDisconnect"));
 
-        receivedBytes = benchmarkerMetrics.meter(MetricRegistry.name(aggregatedId, "receivedBytes"));
-        receivedEos = benchmarkerMetrics.meter(MetricRegistry.name(aggregatedId, "receivedEos"));
-        receivedDisconnect = benchmarkerMetrics.meter(MetricRegistry.name(aggregatedId, "receivedDisconnect"));
+        receivedBytes = metricRegistry.meter(MetricRegistry.name(aggregatedId, "receivedBytes"));
+        receivedEos = metricRegistry.meter(MetricRegistry.name(aggregatedId, "receivedEos"));
+        receivedDisconnect = metricRegistry.meter(MetricRegistry.name(aggregatedId, "receivedDisconnect"));
     }
 
     public String getAggregatedId() {

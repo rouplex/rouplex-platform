@@ -35,6 +35,10 @@ class RouplexTcpChannel implements Closeable {
     protected NotificationListener<RouplexTcpClient> rouplexTcpClientConnectedListener;
     @Final
     protected NotificationListener<RouplexTcpClient> rouplexTcpClientConnectionFailedListener;
+    @Final
+    protected int sendBufferSize;
+    @Final
+    protected int receiveBufferSize;
 
     // not final, it is set from binder
     protected SelectionKey selectionKey;
@@ -96,6 +100,20 @@ class RouplexTcpChannel implements Closeable {
             return builder;
         }
 
+        public B withSendBufferSize(int sendBufferSize) {
+            checkNotBuilt();
+
+            instance.sendBufferSize = sendBufferSize;
+            return builder;
+        }
+
+        public B withReceiveBufferSize(int receiveBufferSize) {
+            checkNotBuilt();
+
+            instance.receiveBufferSize = receiveBufferSize;
+            return builder;
+        }
+
         public B withRouplexTcpClientConnectedListener(
                 NotificationListener<RouplexTcpClient> rouplexTcpClientConnectedListener) {
             checkNotBuilt();
@@ -111,6 +129,7 @@ class RouplexTcpChannel implements Closeable {
             instance.rouplexTcpClientConnectionFailedListener = rouplexTcpClientConnectionFailedListener;
             return builder;
         }
+        
         public B withAttachment(@Nullable Object attachment) {
             instance.attachment = attachment;
             return builder;

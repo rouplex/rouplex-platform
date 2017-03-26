@@ -11,22 +11,31 @@ import java.util.logging.Logger;
  */
 class RouplexTcpBinderReporter {
     private static final Logger logger = Logger.getLogger(RouplexTcpBinderReporter.class.getSimpleName());
-    private static final MetricRegistry benchmarkerMetrics = new MetricRegistry();
-    public static final String format = "%s"; // [Hash]
+    public static final String format = "RouplexTcpBinder.%s"; // [Hash]
 
     final RouplexTcpBinder rouplexTcpBinder;
+    final AopInstrumentor aopInstrumentor;
 
     Meter handleSelectedKey;
 
     String aggregatedId;
     String completeId;
 
-    public RouplexTcpBinderReporter(RouplexTcpBinder rouplexTcpBinder) {
+    public RouplexTcpBinderReporter(RouplexTcpBinder rouplexTcpBinder, AopInstrumentor aopInstrumentor) {
         this.rouplexTcpBinder = rouplexTcpBinder;
+        this.aopInstrumentor = aopInstrumentor;
 
         updateId();
 
-        handleSelectedKey = benchmarkerMetrics.meter(MetricRegistry.name(aggregatedId, "handleSelectedKey"));
+        handleSelectedKey = aopInstrumentor.metricRegistry.meter(MetricRegistry.name(aggregatedId, "handleSelectedKey"));
+
+//        aopInstrumentor.metricRegistry.register(MetricRegistry.name(aggregatedId, "registeredSelectionKeys"),
+//                new Gauge<Integer>() {
+//                    @Override
+//                    public Integer getValue() {
+//                        return rouplexTcpBinder.selector.keys().size();
+//                    }
+//                });
     }
 
     public Object handleSelectedKey(ProceedingJoinPoint pjp) throws Throwable {
@@ -38,8 +47,11 @@ class RouplexTcpBinderReporter {
     }
 
     private void updateId() {
-        completeId = String.format(format,rouplexTcpBinder.hashCode());
-        aggregatedId = completeId;
+        completeId = String.format(format, rouplexTcpBinder.hashCode());
+        AopConfig aopConfig = aopInstrumentor.aopConfig;
+        aggregatedId = String.format(format,
+                aopConfig.aggregateTcpBinders ? "A" : rouplexTcpBinder.hashCode()
+        );
     }
 
     public String getAggregatedId() {
