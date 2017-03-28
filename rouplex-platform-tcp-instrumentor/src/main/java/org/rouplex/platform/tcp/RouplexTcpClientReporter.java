@@ -3,9 +3,7 @@ package org.rouplex.platform.tcp;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import org.aspectj.lang.ProceedingJoinPoint;
-import org.rouplex.nio.channels.spi.SSLSocketChannelImpl;
 
-import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.logging.Logger;
@@ -13,38 +11,39 @@ import java.util.logging.Logger;
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-class RouplexTcpClientReporter {
+public class RouplexTcpClientReporter {
     private static final Logger logger = Logger.getLogger(RouplexTcpClientReporter.class.getSimpleName());
     public static final String format = "%s.%s:%s::%s:%s";
     // [Client,Server].[Local]:[Port]::[Remote]:[Port]
 
-    final RouplexTcpClient rouplexTcpClient;
-    final AopInstrumentor aopInstrumentor;
+    public final RouplexTcpClient rouplexTcpClient;
+    public final AopInstrumentor aopInstrumentor;
 
-    String actor;
+    public String actor;
 
-    String remoteAddress;
-    String remotePort;
-    String localAddress;
-    String localPort;
+    public String remoteAddress;
+    public String remotePort;
+    public String localAddress;
+    public String localPort;
 
-    Meter sentBytes;
-    Meter unsentBytes;
-    Meter innerSentBytes;
-    Meter sentEos;
-    Meter innerSentEos;
-    Meter sentDisconnect;
+    public Meter sentBytes;
+    public Meter unsentBytes;
+    public Meter innerSentBytes;
+    public Meter sentEos;
+    public Meter innerSentEos;
+    public Meter sentDisconnect;
 
-    Meter receivedBytes;
-    Meter receivedEos;
-    Meter receivedDisconnect;
+    public Meter receivedBytes;
+    public Meter receivedEos;
+    public Meter receivedDisconnect;
 
-    String aggregatedId;
-    String completeId;
+    public String aggregatedId;
+    public String completeId;
 
     public RouplexTcpClientReporter(RouplexTcpClient rouplexTcpClient, AopInstrumentor aopInstrumentor) {
         this.rouplexTcpClient = rouplexTcpClient;
         this.aopInstrumentor = aopInstrumentor;
+        actor = rouplexTcpClient.getRouplexTcpServer() == null ? "RouplexTcpClient" : "RouplexTcpServer";
 
         try {
             InetSocketAddress inetSocketAddress = (InetSocketAddress) rouplexTcpClient.getRemoteAddress();
@@ -59,10 +58,6 @@ class RouplexTcpClientReporter {
                 localPort = inetSocketAddress.getPort() + "";
             }
 
-            Field field = SSLSocketChannelImpl.class.getDeclaredField("clientMode");
-            field.setAccessible(true);
-            boolean clientMode = (boolean) field.get(rouplexTcpClient.getSelectableChannel());
-            actor = clientMode ? "RouplexTcpClient" : "RouplexTcpServer";
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

@@ -11,17 +11,17 @@ import java.util.logging.Logger;
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-class RouplexTcpBinderReporter {
+public class RouplexTcpBinderReporter {
     private static final Logger logger = Logger.getLogger(RouplexTcpBinderReporter.class.getSimpleName());
     public static final String format = "RouplexTcpBinder.%s"; // [Hash]
 
-    final RouplexTcpBinder rouplexTcpBinder;
-    final AopInstrumentor aopInstrumentor;
+    public final RouplexTcpBinder rouplexTcpBinder;
+    public final AopInstrumentor aopInstrumentor;
 
-    Meter handleSelectedKey;
+    public Meter handleSelectedKey;
 
-    String aggregatedId;
-    String completeId;
+    public String aggregatedId;
+    public String completeId;
 
     public RouplexTcpBinderReporter(RouplexTcpBinder rouplexTcpBinder, AopInstrumentor aopInstrumentor) {
         this.rouplexTcpBinder = rouplexTcpBinder;

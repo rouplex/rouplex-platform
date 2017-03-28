@@ -129,7 +129,8 @@ public class RouplexTcpBinder implements Closeable {
             if (rouplexTcpClientClosedListener != null && tcpChannel instanceof RouplexTcpClient) {
                 rouplexTcpClientClosedListener.onEvent((RouplexTcpClient) tcpChannel);
             }
-        } catch (Exception cce) {
+        } catch (Exception e) {
+            e.printStackTrace();
             // channel is already closed
         }
     }
@@ -141,11 +142,21 @@ public class RouplexTcpBinder implements Closeable {
      */
     private boolean notifyConnectedTcpClient(RouplexTcpClient tcpClient) throws IOException {
         if (tcpClient.rouplexTcpClientConnectedListener != null) {
-            tcpClient.rouplexTcpClientConnectedListener.onEvent(tcpClient);
+            try {
+                tcpClient.rouplexTcpClientConnectedListener.onEvent(tcpClient);
+            } catch (Exception e) {
+                e.printStackTrace();
+                // we neglect client thrown exceptions during event handling
+            }
         }
 
-        if (this.rouplexTcpClientConnectedListener != null) {
-            this.rouplexTcpClientConnectedListener.onEvent(tcpClient);
+        if (rouplexTcpClientConnectedListener != null) {
+            try {
+                rouplexTcpClientConnectedListener.onEvent(tcpClient);
+            } catch (Exception e) {
+                e.printStackTrace();
+                // we neglect client thrown exceptions during event handling
+            }
         }
 
         return true;
@@ -364,6 +375,22 @@ public class RouplexTcpBinder implements Closeable {
                         rouplexTcpClient.throttledSender.removeWriteBuffer(writeBuffer);
                     } catch (Exception e) {
                         // IOException | RuntimeException (from client handling resume)
+
+                        /**
+                         * Extremely rarely, a read may succeed (with 0+ bytes read), yet the next read would have
+                         * produced -1. The channel would be in closed state, and the attempt to write would result in
+                         * closing it. We won't be able to know if that would have been the case so we just fire
+                         * "disconnect" (or null) to the receiver. The eosReceived check is there so that we don't fire
+                         * the disconnect if the -1 has already been picked up and fired already
+                         */
+                        if (!rouplexTcpClient.throttledReceiver.eosReceived) {
+                            try {
+                                rouplexTcpClient.throttledReceiver.consumeSocketInput(null);
+                            } catch (RuntimeException re) {
+                                // fall through
+                            }
+                        }
+
                         rouplexTcpClient.closeSilently();
                         break;
                     }

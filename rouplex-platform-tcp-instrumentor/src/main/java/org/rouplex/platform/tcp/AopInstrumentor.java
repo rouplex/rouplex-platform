@@ -22,11 +22,11 @@ public class AopInstrumentor {
         }
     }
 
-    final AopConfig aopConfig = AopConfig.allAggregated();
-    final MetricRegistry metricRegistry = new MetricRegistry();
-    final Map<RouplexTcpBinder, RouplexTcpBinderReporter> tcpBinders
+    public final AopConfig aopConfig = AopConfig.allAggregated();
+    public final MetricRegistry metricRegistry = new MetricRegistry();
+    public final Map<RouplexTcpBinder, RouplexTcpBinderReporter> tcpBinders
             = new ConcurrentHashMap<RouplexTcpBinder, RouplexTcpBinderReporter>();
-    final Map<RouplexTcpClient, RouplexTcpClientReporter> tcpClients
+    public final Map<RouplexTcpClient, RouplexTcpClientReporter> tcpClients
             = new ConcurrentHashMap<RouplexTcpClient, RouplexTcpClientReporter>();
 
     RouplexTcpBinderReporter getRouplexTcpBinderReporter(ProceedingJoinPoint pjp) {
