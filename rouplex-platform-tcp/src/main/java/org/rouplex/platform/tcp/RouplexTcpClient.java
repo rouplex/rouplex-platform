@@ -1,8 +1,8 @@
 package org.rouplex.platform.tcp;
 
 import org.rouplex.commons.annotations.Nullable;
+import org.rouplex.nio.channels.SSLSelector;
 import org.rouplex.nio.channels.SSLSocketChannel;
-import org.rouplex.nio.channels.spi.SSLSelector;
 import org.rouplex.platform.rr.NotificationListener;
 import org.rouplex.platform.rr.ReceiveChannel;
 import org.rouplex.platform.rr.SendChannel;
@@ -15,7 +15,10 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.*;
+import java.nio.channels.SelectableChannel;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.SocketChannel;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.LinkedList;
@@ -79,6 +82,16 @@ public class RouplexTcpClient extends RouplexTcpChannel {
 
     public static Builder newBuilder() {
         return new Builder(new RouplexTcpClient(null, null, null));
+    }
+
+    public static RouplexTcpClient wrap(SocketChannel socketChannel) throws IOException {
+        return wrap(socketChannel, null);
+    }
+
+    public static RouplexTcpClient wrap(SocketChannel socketChannel, RouplexTcpBinder rouplexTcpBinder) throws IOException {
+        RouplexTcpClient result = new RouplexTcpClient(socketChannel, rouplexTcpBinder, null);
+        result.connectAsync();
+        return result;
     }
 
     class ThrottledReceiver extends Throttle {
@@ -284,7 +297,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
     protected SocketAddress remoteAddress;
     protected ThrottledSender throttledSender;
     protected ThrottledReceiver throttledReceiver;
-    protected RouplexTcpServer rouplexTcpServer;
+    protected RouplexTcpServer rouplexTcpServer; // if this channel was created by a rouplexTcpServer
     boolean creationComplete;
 
     RouplexTcpClient(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder, RouplexTcpServer rouplexTcpServer) {
@@ -298,7 +311,9 @@ public class RouplexTcpClient extends RouplexTcpChannel {
             rouplexTcpBinder = new RouplexTcpBinder(sslContext == null ? Selector.open() : SSLSelector.open(), null);
         }
 
-        SocketChannel socketChannel = sslContext == null ? SocketChannel.open() : SSLSocketChannel.open(sslContext);
+        SocketChannel socketChannel = selectableChannel != null ? (SocketChannel) selectableChannel :
+                    sslContext == null ? SocketChannel.open() : SSLSocketChannel.open(sslContext);
+
         if (sendBufferSize != 0) {
             socketChannel.socket().setSendBufferSize(sendBufferSize);
         }

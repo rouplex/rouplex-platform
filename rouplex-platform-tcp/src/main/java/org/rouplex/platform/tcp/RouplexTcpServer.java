@@ -1,8 +1,8 @@
 package org.rouplex.platform.tcp;
 
 import org.rouplex.commons.annotations.Nullable;
+import org.rouplex.nio.channels.SSLSelector;
 import org.rouplex.nio.channels.SSLServerSocketChannel;
-import org.rouplex.nio.channels.spi.SSLSelector;
 
 import javax.net.ssl.SSLContext;
 import java.io.IOException;
@@ -56,11 +56,21 @@ public class RouplexTcpServer extends RouplexTcpChannel {
     }
 
     public static Builder newBuilder() {
-        return new Builder(new RouplexTcpServer());
+        return new Builder(new RouplexTcpServer(null, null));
     }
 
-    RouplexTcpServer() {
-        super(null, null);
+    public static RouplexTcpServer wrap(ServerSocketChannel serverSocketChannel) throws IOException {
+        return wrap(serverSocketChannel, null);
+    }
+
+    public static RouplexTcpServer wrap(ServerSocketChannel serverSocketChannel, RouplexTcpBinder rouplexTcpBinder) throws IOException {
+        RouplexTcpServer result = new RouplexTcpServer(serverSocketChannel, rouplexTcpBinder);
+        result.start();
+        return result;
+    }
+
+    RouplexTcpServer(ServerSocketChannel serverSocketChannel, RouplexTcpBinder rouplexTcpBinder) {
+        super(serverSocketChannel, rouplexTcpBinder);
     }
 
     private RouplexTcpServer start() throws IOException {
@@ -68,7 +78,9 @@ public class RouplexTcpServer extends RouplexTcpChannel {
             rouplexTcpBinder = new RouplexTcpBinder(sslContext == null ? Selector.open() : SSLSelector.open(), null);
         }
 
-        ServerSocketChannel serverSocketChannel = sslContext == null ? ServerSocketChannel.open() : SSLServerSocketChannel.open(sslContext);
+        ServerSocketChannel serverSocketChannel = selectableChannel != null ? (ServerSocketChannel) selectableChannel :
+                sslContext == null ? ServerSocketChannel.open() : SSLServerSocketChannel.open(sslContext);
+
         if (sendBufferSize != 0) {
             // hmm interesting, serverSocket doesn't have sendBufferSize
             // serverSocketChannel.socket().setSendBufferSize(sendBufferSize);

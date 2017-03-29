@@ -2,7 +2,7 @@ package org.rouplex.platform.tcp;
 
 import org.rouplex.commons.annotations.Nullable;
 import org.rouplex.commons.collections.SortedByValueMap;
-import org.rouplex.nio.channels.spi.SSLSelector;
+import org.rouplex.nio.channels.SSLSelector;
 import org.rouplex.platform.rr.NotificationListener;
 import org.rouplex.platform.rr.Throttle;
 
