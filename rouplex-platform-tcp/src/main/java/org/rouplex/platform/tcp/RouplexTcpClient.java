@@ -89,6 +89,7 @@ public class RouplexTcpClient extends RouplexTcpChannel {
     }
 
     public static RouplexTcpClient wrap(SocketChannel socketChannel, RouplexTcpBinder rouplexTcpBinder) throws IOException {
+        socketChannel.configureBlocking(false);
         RouplexTcpClient result = new RouplexTcpClient(socketChannel, rouplexTcpBinder, null);
         result.connectAsync();
         return result;
@@ -321,9 +322,11 @@ public class RouplexTcpClient extends RouplexTcpChannel {
             socketChannel.socket().setReceiveBufferSize(receiveBufferSize);
         }
 
-        selectableChannel = socketChannel;
-        socketChannel.configureBlocking(false);
-        socketChannel.connect(remoteAddress);
+        if (selectableChannel == null) {
+            selectableChannel = socketChannel;
+            socketChannel.configureBlocking(false);
+            socketChannel.connect(remoteAddress);
+        }
     }
 
     private void connectAsync() throws IOException {

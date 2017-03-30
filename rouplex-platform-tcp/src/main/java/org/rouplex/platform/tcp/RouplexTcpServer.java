@@ -64,6 +64,7 @@ public class RouplexTcpServer extends RouplexTcpChannel {
     }
 
     public static RouplexTcpServer wrap(ServerSocketChannel serverSocketChannel, RouplexTcpBinder rouplexTcpBinder) throws IOException {
+        serverSocketChannel.configureBlocking(false);
         RouplexTcpServer result = new RouplexTcpServer(serverSocketChannel, rouplexTcpBinder);
         result.start();
         return result;
@@ -89,10 +90,12 @@ public class RouplexTcpServer extends RouplexTcpChannel {
             serverSocketChannel.socket().setReceiveBufferSize(receiveBufferSize);
         }
 
-        selectableChannel = serverSocketChannel;
-        serverSocketChannel.bind(localAddress, backlog);
-        rouplexTcpBinder.asyncRegisterTcpChannel(this);
+        if (selectableChannel == null) {
+            serverSocketChannel.bind(localAddress, backlog);
+            selectableChannel = serverSocketChannel;
+        }
 
+        rouplexTcpBinder.asyncRegisterTcpChannel(this);
         return this;
     }
 }
