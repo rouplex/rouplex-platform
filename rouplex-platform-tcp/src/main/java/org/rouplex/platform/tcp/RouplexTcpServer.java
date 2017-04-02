@@ -12,18 +12,25 @@ import java.nio.channels.ServerSocketChannel;
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class RouplexTcpServer extends RouplexTcpChannel {
+public class RouplexTcpServer extends RouplexTcpConnector {
     protected int backlog;
 
-    public static class Builder extends RouplexTcpChannel.Builder<RouplexTcpServer, Builder> {
+    public static class Builder extends RouplexTcpConnector.Builder<RouplexTcpServer, Builder> {
         Builder(RouplexTcpServer instance) {
             super(instance);
         }
 
         protected void checkCanBuild() {
             if (instance.localAddress == null) {
-                throw new IllegalStateException("Missing value for localAddress");
+                throw new IllegalStateException("Missing value for localAddress"); // maybe remove this constraint
             }
+        }
+
+        public Builder withServerSocketChannel(ServerSocketChannel serverSocketChannel) {
+            checkNotBuilt();
+
+            instance.selectableChannel = serverSocketChannel;
+            return builder;
         }
 
         public Builder withBacklog(int backlog) {
@@ -59,17 +66,6 @@ public class RouplexTcpServer extends RouplexTcpChannel {
         return new Builder(new RouplexTcpServer(null, null));
     }
 
-    public static RouplexTcpServer wrap(ServerSocketChannel serverSocketChannel) throws IOException {
-        return wrap(serverSocketChannel, null);
-    }
-
-    public static RouplexTcpServer wrap(ServerSocketChannel serverSocketChannel, RouplexTcpBinder rouplexTcpBinder) throws IOException {
-        serverSocketChannel.configureBlocking(false);
-        RouplexTcpServer result = new RouplexTcpServer(serverSocketChannel, rouplexTcpBinder);
-        result.start();
-        return result;
-    }
-
     RouplexTcpServer(ServerSocketChannel serverSocketChannel, RouplexTcpBinder rouplexTcpBinder) {
         super(serverSocketChannel, rouplexTcpBinder);
     }
@@ -79,8 +75,13 @@ public class RouplexTcpServer extends RouplexTcpChannel {
             rouplexTcpBinder = new RouplexTcpBinder(sslContext == null ? Selector.open() : SSLSelector.open(), null);
         }
 
-        ServerSocketChannel serverSocketChannel = selectableChannel != null ? (ServerSocketChannel) selectableChannel :
-                sslContext == null ? ServerSocketChannel.open() : SSLServerSocketChannel.open(sslContext);
+        ServerSocketChannel serverSocketChannel;
+        if (selectableChannel != null) {
+            serverSocketChannel = (ServerSocketChannel) selectableChannel;
+        } else {
+            serverSocketChannel = sslContext == null ? ServerSocketChannel.open() : SSLServerSocketChannel.open(sslContext);
+            selectableChannel = serverSocketChannel;
+        }
 
         if (sendBufferSize != 0) {
             // hmm interesting, serverSocket doesn't have sendBufferSize
@@ -90,9 +91,9 @@ public class RouplexTcpServer extends RouplexTcpChannel {
             serverSocketChannel.socket().setReceiveBufferSize(receiveBufferSize);
         }
 
-        if (selectableChannel == null) {
+        serverSocketChannel.configureBlocking(false);
+        if (!serverSocketChannel.socket().isBound()) {
             serverSocketChannel.bind(localAddress, backlog);
-            selectableChannel = serverSocketChannel;
         }
 
         rouplexTcpBinder.asyncRegisterTcpChannel(this);

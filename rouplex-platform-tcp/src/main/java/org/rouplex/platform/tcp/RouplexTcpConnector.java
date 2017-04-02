@@ -2,7 +2,6 @@ package org.rouplex.platform.tcp;
 
 import org.rouplex.commons.annotations.Final;
 import org.rouplex.commons.annotations.Nullable;
-import org.rouplex.platform.rr.NotificationListener;
 
 import javax.net.ssl.SSLContext;
 import java.io.Closeable;
@@ -18,7 +17,7 @@ import java.nio.channels.SelectionKey;
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-class RouplexTcpChannel implements Closeable {
+class RouplexTcpConnector implements Closeable {
     protected final Object lock = new Object();
 
     @Final
@@ -32,9 +31,7 @@ class RouplexTcpChannel implements Closeable {
     @Final // set in build() if not set
     protected SelectableChannel selectableChannel;
     @Final
-    protected NotificationListener<RouplexTcpClient> rouplexTcpClientConnectedListener;
-    @Final
-    protected NotificationListener<RouplexTcpClient> rouplexTcpClientConnectionFailedListener;
+    protected RouplexTcpConnectorLifecycleListener<RouplexTcpClient> rouplexTcpClientLifecycleListener;
     @Final
     protected int sendBufferSize;
     @Final
@@ -47,13 +44,13 @@ class RouplexTcpChannel implements Closeable {
 
     protected boolean isClosed;
 
-    RouplexTcpChannel(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder) {
+    RouplexTcpConnector(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder) {
         this.selectableChannel = selectableChannel;
         this.rouplexTcpBinder = rouplexTcpBinder;
         sharedRouplexBinder = true;
     }
 
-    static abstract class Builder<T extends RouplexTcpChannel, B extends Builder> {
+    static abstract class Builder<T extends RouplexTcpConnector, B extends Builder> {
         T instance;
         B builder;
 
@@ -114,19 +111,11 @@ class RouplexTcpChannel implements Closeable {
             return builder;
         }
 
-        public B withRouplexTcpClientConnectedListener(
-                NotificationListener<RouplexTcpClient> rouplexTcpClientConnectedListener) {
+        public B withRouplexTcpClientLifecycleListener(
+                RouplexTcpConnectorLifecycleListener<RouplexTcpClient> rouplexTcpClientLifecycleListener) {
             checkNotBuilt();
 
-            instance.rouplexTcpClientConnectedListener = rouplexTcpClientConnectedListener;
-            return builder;
-        }
-
-        public B withRouplexTcpClientConnectionFailedListener(
-                NotificationListener<RouplexTcpClient> rouplexTcpClientConnectionFailedListener) {
-            checkNotBuilt();
-
-            instance.rouplexTcpClientConnectionFailedListener = rouplexTcpClientConnectionFailedListener;
+            instance.rouplexTcpClientLifecycleListener = rouplexTcpClientLifecycleListener;
             return builder;
         }
         
@@ -140,13 +129,24 @@ class RouplexTcpChannel implements Closeable {
         return rouplexTcpBinder;
     }
 
-    public SocketAddress getLocalAddress() throws IOException {
+    public SocketAddress getLocalAddress(boolean resolved) throws IOException {
         synchronized (lock) {
             if (isClosed()) {
                 throw new IOException("Already closed");
             }
 
-            return selectableChannel == null ? localAddress : ((NetworkChannel) selectableChannel).getLocalAddress();
+            SocketAddress result = selectableChannel != null
+                    ? ((NetworkChannel) selectableChannel).getLocalAddress() : null;
+
+            if (result != null) {
+                return result;
+            }
+
+            if (resolved) {
+                throw new IOException("Not bound yet");
+            }
+
+            return localAddress;
         }
     }
 

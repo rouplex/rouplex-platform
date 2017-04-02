@@ -1,4 +1,4 @@
-package org.rouplex.platform.rr;
+package org.rouplex.platform.io;
 
 /**
  * A channel which can receive payloads of a generic type

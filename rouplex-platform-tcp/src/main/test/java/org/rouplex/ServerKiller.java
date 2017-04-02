@@ -4,7 +4,7 @@ package org.rouplex;
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 
-import org.rouplex.platform.rr.NotificationListener;
+import org.rouplex.platform.io.NotificationListener;
 import org.rouplex.platform.tcp.RouplexTcpBinder;
 import org.rouplex.platform.tcp.RouplexTcpClient;
 

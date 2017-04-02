@@ -14,7 +14,7 @@ import java.util.logging.Logger;
 public class RouplexTcpClientReporter {
     private static final Logger logger = Logger.getLogger(RouplexTcpClientReporter.class.getSimpleName());
     public static final String format = "%s.%s:%s::%s:%s";
-    // [Client,Server].[Local]:[Port]::[Remote]:[Port]
+    // [RouplexTcpClient,RouplexTcpServer].[Local]:[Port]::[Remote]:[Port]
 
     public final RouplexTcpClient rouplexTcpClient;
     public final AopInstrumentor aopInstrumentor;
@@ -46,16 +46,16 @@ public class RouplexTcpClientReporter {
         actor = rouplexTcpClient.getRouplexTcpServer() == null ? "RouplexTcpClient" : "RouplexTcpServer";
 
         try {
-            InetSocketAddress inetSocketAddress = (InetSocketAddress) rouplexTcpClient.getRemoteAddress();
-            if (inetSocketAddress != null) {
-                remoteAddress = inetSocketAddress.getHostName();
-                remotePort = inetSocketAddress.getPort() + "";
-            }
-
-            inetSocketAddress = (InetSocketAddress) rouplexTcpClient.getLocalAddress();
+            InetSocketAddress inetSocketAddress = (InetSocketAddress) rouplexTcpClient.getLocalAddress(false);
             if (inetSocketAddress != null) {
                 localAddress = inetSocketAddress.getHostName();
                 localPort = inetSocketAddress.getPort() + "";
+            }
+
+            inetSocketAddress = (InetSocketAddress) rouplexTcpClient.getRemoteAddress(false);
+            if (inetSocketAddress != null) {
+                remoteAddress = inetSocketAddress.getHostName();
+                remotePort = inetSocketAddress.getPort() + "";
             }
 
         } catch (Exception e) {
