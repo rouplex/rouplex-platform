@@ -3,8 +3,8 @@ package org.rouplex.platform.tcp;
 import org.rouplex.commons.annotations.Nullable;
 import org.rouplex.nio.channels.SSLSelector;
 import org.rouplex.nio.channels.SSLSocketChannel;
-import org.rouplex.platform.io.ReceiveChannel;
-import org.rouplex.platform.io.SendChannel;
+import org.rouplex.platform.io.Receiver;
+import org.rouplex.platform.io.Sender;
 import org.rouplex.platform.io.Throttle;
 
 import javax.net.ssl.SSLContext;
@@ -26,10 +26,10 @@ import java.util.concurrent.TimeUnit;
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class RouplexTcpClient extends RouplexTcpConnector {
+public class RouplexTcpClient extends RouplexTcpHub {
     static final ByteBuffer EOS = ByteBuffer.allocate(0);
 
-    public static class Builder extends RouplexTcpConnector.Builder<RouplexTcpClient, Builder> {
+    public static class Builder extends RouplexTcpHub.Builder<RouplexTcpClient, Builder> {
         Builder(RouplexTcpClient instance) {
             super(instance);
         }
@@ -93,7 +93,7 @@ public class RouplexTcpClient extends RouplexTcpConnector {
 
     class ThrottledReceiver extends Throttle {
         @Nullable
-        private ReceiveChannel<byte[]> receiveChannel;
+        private Receiver<byte[]> receiver;
         boolean eosReceived;
 
         private long rateLimitCurrentTimestamp;
@@ -121,7 +121,7 @@ public class RouplexTcpClient extends RouplexTcpConnector {
         }
 
         boolean consumeSocketInput(byte[] payload) {
-            boolean consumed = receiveChannel == null || receiveChannel.receive(payload);
+            boolean consumed = receiver == null || receiver.receive(payload);
 
             if (payload == null) {
                 return true;
@@ -147,7 +147,7 @@ public class RouplexTcpClient extends RouplexTcpConnector {
         }
     }
 
-    class ThrottledSender implements SendChannel<ByteBuffer> {
+    class ThrottledSender implements Sender<ByteBuffer> {
         private final LinkedList<ByteBuffer> writeBuffers = new LinkedList<ByteBuffer>();
         private long remaining = sendBufferSize != 0 ? sendBufferSize : 256 * 1024;
         @Nullable
@@ -394,16 +394,16 @@ public class RouplexTcpClient extends RouplexTcpConnector {
     }
 
     /**
-     * Hook (rather get) the channel which would be used to send bits.
+     * Hook (rather get) the channel which would be used to handleRequest bits.
      * <p>
      * The provided throttle will be used by us, in case we need to pause the sends (writes) because the buffers
      * may fill up.
      *
      * @param throttle
-     *         A throttle construct which we would use to pause send requests
-     * @return The channel to be used to send the bits.
+     *         A throttle construct which we would use to pause handleRequest requests
+     * @return The channel to be used to handleRequest the bits.
      */
-    public SendChannel<ByteBuffer> hookSendChannel(Throttle throttle) {
+    public Sender<ByteBuffer> hookSendChannel(Throttle throttle) {
         synchronized (lock) {
             if (throttledSender.throttle != null) {
                 throw new IllegalStateException("Send channel already hooked.");
@@ -418,17 +418,17 @@ public class RouplexTcpClient extends RouplexTcpConnector {
      * Hook the receive channel which would be getting all the received bits.
      * The receiver can use the Throttle returned to notify us to pause (and then later, to resume).
      *
-     * @param receiveChannel
+     * @param receiver
      *         The channel receiving the bits
      * @return The throttle construct which the receiver can use to throttle the flow of receiving bits.
      */
-    public Throttle hookReceiveChannel(@Nullable ReceiveChannel<byte[]> receiveChannel, boolean started) {
+    public Throttle hookReceiveChannel(@Nullable Receiver<byte[]> receiver, boolean started) {
         synchronized (lock) {
-            if (throttledReceiver.receiveChannel != null) {
+            if (throttledReceiver.receiver != null) {
                 throw new IllegalStateException("Receive channel already hooked.");
             }
 
-            throttledReceiver.receiveChannel = receiveChannel;
+            throttledReceiver.receiver = receiver;
             if (started) {
                 throttledReceiver.resume();
             }

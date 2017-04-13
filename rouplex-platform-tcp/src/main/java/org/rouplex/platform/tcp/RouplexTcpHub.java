@@ -13,11 +13,12 @@ import java.net.UnknownHostException;
 import java.nio.channels.NetworkChannel;
 import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-class RouplexTcpConnector implements Closeable {
+class RouplexTcpHub implements Closeable {
     protected final Object lock = new Object();
 
     @Final
@@ -44,13 +45,13 @@ class RouplexTcpConnector implements Closeable {
 
     protected boolean isClosed;
 
-    RouplexTcpConnector(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder) {
+    RouplexTcpHub(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder) {
         this.selectableChannel = selectableChannel;
         this.rouplexTcpBinder = rouplexTcpBinder;
         sharedRouplexBinder = true;
     }
 
-    static abstract class Builder<T extends RouplexTcpConnector, B extends Builder> {
+    static abstract class Builder<T extends RouplexTcpHub, B extends Builder> {
         T instance;
         B builder;
 

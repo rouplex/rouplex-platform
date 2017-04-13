@@ -5,7 +5,7 @@ package org.rouplex.platform.io;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public interface ReceiveChannel<T> {
+public interface Receiver<T> {
     /**
      * Receive a payload (to process)
      *

@@ -23,7 +23,7 @@ public class ServerKiller {
                 @Override
                 public void onEvent(RouplexTcpClient rouplexTcpClient) {
                     try {
-                        rouplexTcpClient.hookSendChannel(null).send(ByteBuffer.allocate(0)); // send EOS
+                        rouplexTcpClient.hookSendChannel(null).send(ByteBuffer.allocate(0)); // handleRequest EOS
                     } catch (IOException ioe) {
                         // handle it
                     }

@@ -45,8 +45,8 @@ public abstract class Throttle {
      * Tell the throttle that it can resume sending data.
      *
      * It may be that the producer never stopped sending data, most of which has been negatively acknowledged
-     * ({@link SendChannel#send(Object)} returned false) anyway. But in the case the producer has honored a
-     * {@link #pause()} (or a {@link SendChannel#send(Object)} which returned false), now it has a way to know when to
+     * ({@link Sender#send(Object)} returned false) anyway. But in the case the producer has honored a
+     * {@link #pause()} (or a {@link Sender#send(Object)} which returned false), now it has a way to know when to
      * resume now.
      */
     public abstract void resume();

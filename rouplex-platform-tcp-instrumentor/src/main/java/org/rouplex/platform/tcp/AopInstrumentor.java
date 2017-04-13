@@ -60,6 +60,11 @@ public class AopInstrumentor {
                 .start();
     }
 
+    @Around("execution(* org.rouplex.platform.tcp.RouplexTcpBinder.logHandleSelectedKeyException(..))")
+    public Object logHandleSelectedKeyException(ProceedingJoinPoint pjp) throws Throwable {
+        return getRouplexTcpBinderReporter(pjp).logHandleSelectedKeyException(pjp);
+    }
+
     @Around("execution(* org.rouplex.platform.tcp.RouplexTcpBinder.handleSelectedKey(..))")
     public Object handleSelectedKey(ProceedingJoinPoint pjp) throws Throwable {
         return getRouplexTcpBinderReporter(pjp).handleSelectedKey(pjp);

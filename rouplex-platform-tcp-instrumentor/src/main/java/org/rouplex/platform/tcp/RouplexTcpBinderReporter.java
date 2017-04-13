@@ -5,6 +5,7 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import org.aspectj.lang.ProceedingJoinPoint;
 
+import java.nio.ByteBuffer;
 import java.util.ConcurrentModificationException;
 import java.util.logging.Logger;
 
@@ -74,6 +75,12 @@ public class RouplexTcpBinderReporter {
             // read the comment at beginning of the block
         }
 
+    }
+
+    public Object logHandleSelectedKeyException(ProceedingJoinPoint pjp) throws Throwable {
+        Exception e = (Exception) pjp.getArgs()[0];
+        logger.info(String.format("logHandleSelectedKeyException %s : %s", e.getClass(), e.getMessage()));
+        return pjp.proceed();
     }
 
     public String getAggregatedId() {

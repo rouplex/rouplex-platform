@@ -5,7 +5,7 @@ package org.rouplex.platform.tcp;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public interface RouplexTcpConnectorLifecycleListener<T extends RouplexTcpConnector> {
+public interface RouplexTcpConnectorLifecycleListener<T extends RouplexTcpHub> {
     /**
      * A rouplexTcpConnector was created (connected/bound depending on context)
      *

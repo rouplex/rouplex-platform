@@ -7,5 +7,5 @@ import org.rouplex.platform.RouplexService;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-interface RequestWithResponseChannel<S, D> extends RouplexService {
+interface RequestWithResponseHandler<S, D> extends RouplexService {
 }

@@ -3,11 +3,11 @@ package org.rouplex.platform.io;
 import java.io.IOException;
 
 /**
- * A channel which can send payloads of a generic type.
+ * A channel which can handleRequest payloads of a generic type.
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public interface SendChannel<T> {
+public interface Sender<T> {
     /**
      * Send the payload. This is a non blocking call, and the payload type T must provide a way to expose the amount
      * of the data sent.

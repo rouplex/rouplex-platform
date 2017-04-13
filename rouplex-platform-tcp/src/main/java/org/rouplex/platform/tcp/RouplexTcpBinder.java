@@ -26,8 +26,8 @@ public class RouplexTcpBinder implements Closeable {
     protected final boolean sharedExecutorService;
     protected final ByteBuffer readBuffer;
 
-    protected List<RouplexTcpConnector> registeringChannels = new ArrayList<RouplexTcpConnector>();
-    protected List<RouplexTcpConnector> unregisteringChannels = new ArrayList<RouplexTcpConnector>();
+    protected List<RouplexTcpHub> registeringChannels = new ArrayList<RouplexTcpHub>();
+    protected List<RouplexTcpHub> unregisteringChannels = new ArrayList<RouplexTcpHub>();
     protected final Map<SelectionKey, Integer> removingInterestOps = new HashMap<SelectionKey, Integer>();
     protected final SortedByValueMap<SelectionKey, Long> resumingWrites = new SortedByValueMap<SelectionKey, Long>();
     protected final SortedByValueMap<SelectionKey, Long> resumingReads = new SortedByValueMap<SelectionKey, Long>();
@@ -72,21 +72,21 @@ public class RouplexTcpBinder implements Closeable {
     /**
      * Add the channel to be registered on next cycle of selector.
      *
-     * @param rouplexTcpConnector
+     * @param rouplexTcpHub
      * @throws IOException
      */
-    void asyncRegisterTcpChannel(RouplexTcpConnector rouplexTcpConnector) throws IOException {
+    void asyncRegisterTcpChannel(RouplexTcpHub rouplexTcpHub) throws IOException {
         synchronized (lock) {
             if (isClosing) {
                 throw new IOException("RouplexTcpBinder already closed.");
             }
 
-            registeringChannels.add(rouplexTcpConnector);
+            registeringChannels.add(rouplexTcpHub);
             selector.wakeup();
         }
     }
 
-    private boolean registerTcpChannel(RouplexTcpConnector tcpChannel) {
+    private boolean registerTcpChannel(RouplexTcpHub tcpChannel) {
         boolean keepAccepting = true;
 
         try {
@@ -121,7 +121,7 @@ public class RouplexTcpBinder implements Closeable {
         return keepAccepting;
     }
 
-    private void unregisterTcpChannel(RouplexTcpConnector tcpChannel) {
+    private void unregisterTcpChannel(RouplexTcpHub tcpChannel) {
         try {
             if (rouplexTcpClientLifecycleListener != null && tcpChannel instanceof RouplexTcpClient) {
                 RouplexTcpClient rouplexTcpClient = (RouplexTcpClient) tcpChannel;
@@ -162,7 +162,7 @@ public class RouplexTcpBinder implements Closeable {
     }
 
     // For channels that closed and need to report via binder
-    void asyncNotifyClosedTcpChannel(RouplexTcpConnector tcpChannel) throws IOException {
+    void asyncNotifyClosedTcpChannel(RouplexTcpHub tcpChannel) throws IOException {
         synchronized (lock) {
             if (!isClosing) {
                 unregisteringChannels.add(tcpChannel);
@@ -233,8 +233,8 @@ public class RouplexTcpBinder implements Closeable {
                         }
 
                         long selectTimeout;
-                        List<RouplexTcpConnector> registerChannels;
-                        List<RouplexTcpConnector> unregisterChannels;
+                        List<RouplexTcpHub> registerChannels;
+                        List<RouplexTcpHub> unregisterChannels;
                         synchronized (lock) {
                             if (isClosing) {
                                 break;
@@ -244,14 +244,14 @@ public class RouplexTcpBinder implements Closeable {
                                 registerChannels = null;
                             } else {
                                 registerChannels = registeringChannels;
-                                registeringChannels = new ArrayList<RouplexTcpConnector>();
+                                registeringChannels = new ArrayList<RouplexTcpHub>();
                             }
 
                             if (unregisteringChannels.isEmpty()) {
                                 unregisterChannels = null;
                             } else {
                                 unregisterChannels = unregisteringChannels;
-                                unregisteringChannels = new ArrayList<RouplexTcpConnector>();
+                                unregisteringChannels = new ArrayList<RouplexTcpHub>();
                             }
 
                             selectTimeout = updateInterestOpsAndCalculateSelectTimeout();
@@ -260,13 +260,13 @@ public class RouplexTcpBinder implements Closeable {
                         if (registerChannels != null) {
                             // fire only lock-free events towards client! The trade off is that a new channel may fire
                             // after a close() call, but that same channel will be closed shortly after anyway
-                            for (RouplexTcpConnector tcpChannel : registerChannels) {
+                            for (RouplexTcpHub tcpChannel : registerChannels) {
                                 registerTcpChannel(tcpChannel);
                             }
                         }
 
                         if (unregisterChannels != null) {
-                            for (RouplexTcpConnector closedChannel : unregisterChannels) {
+                            for (RouplexTcpHub closedChannel : unregisterChannels) {
                                 unregisterTcpChannel(closedChannel);
                             }
                         }
@@ -279,8 +279,7 @@ public class RouplexTcpBinder implements Closeable {
                         }
                     }
                 } catch (Exception ioe) { // aaa
-                    ioe.printStackTrace();
-                    // something major, close the binder
+                    logSelectException(ioe);
                 }
 
                 syncClose(); // close synchronously.
@@ -396,7 +395,7 @@ public class RouplexTcpBinder implements Closeable {
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            logHandleSelectedKeyException(e);
             // Normally we should check selectionKey.isValid() before any access, and since all ops
             // are synchronous, the condition would hold between various instructions. It is easier
             // to just catch here and loop to next key though since the try/catch is needed anyways
@@ -463,17 +462,25 @@ public class RouplexTcpBinder implements Closeable {
         selector.wakeup();
     }
 
+    private void logHandleSelectedKeyException(Exception e) {
+        // AOP wraps this call for debugging
+    }
+
+    private void logSelectException(Exception e) {
+        // AOP wraps this call for debugging
+    }
+
     private void syncClose() {
         for (SelectionKey selectionKey : selector.keys()) {
             try {
-                ((RouplexTcpConnector) selectionKey.attachment()).close();
+                ((RouplexTcpHub) selectionKey.attachment()).close();
             } catch (IOException ioe) {
             }
         }
 
-        for (RouplexTcpConnector rouplexTcpConnector : registeringChannels) {
+        for (RouplexTcpHub rouplexTcpHub : registeringChannels) {
             try {
-                rouplexTcpConnector.close();
+                rouplexTcpHub.close();
             } catch (IOException ioe) {
             }
         }
