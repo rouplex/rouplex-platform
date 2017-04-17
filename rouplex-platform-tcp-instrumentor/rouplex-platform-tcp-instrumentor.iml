@@ -15,7 +15,7 @@
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="rouplex-platform-tcp" />
-    <orderEntry type="library" name="Maven: org.rouplex:rouplex-niossl:1.8.0-SNAPSHOT" level="project" />
+    <orderEntry type="library" name="Maven: org.rouplex:rouplex-niossl:1.8.0" level="project" />
     <orderEntry type="module" module-name="rouplex-commons" />
     <orderEntry type="module" module-name="rouplex-platform" />
     <orderEntry type="library" name="Maven: org.aspectj:aspectjrt:1.8.9" level="project" />

@@ -13,12 +13,11 @@ import java.net.UnknownHostException;
 import java.nio.channels.NetworkChannel;
 import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-class RouplexTcpHub implements Closeable {
+class RouplexTcpEndPoint implements Closeable {
     protected final Object lock = new Object();
 
     @Final
@@ -32,7 +31,7 @@ class RouplexTcpHub implements Closeable {
     @Final // set in build() if not set
     protected SelectableChannel selectableChannel;
     @Final
-    protected RouplexTcpConnectorLifecycleListener<RouplexTcpClient> rouplexTcpClientLifecycleListener;
+    protected RouplexTcpEndPointListener<RouplexTcpClient> rouplexTcpClientLifecycleListener;
     @Final
     protected int sendBufferSize;
     @Final
@@ -45,13 +44,13 @@ class RouplexTcpHub implements Closeable {
 
     protected boolean isClosed;
 
-    RouplexTcpHub(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder) {
+    RouplexTcpEndPoint(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder) {
         this.selectableChannel = selectableChannel;
         this.rouplexTcpBinder = rouplexTcpBinder;
         sharedRouplexBinder = true;
     }
 
-    static abstract class Builder<T extends RouplexTcpHub, B extends Builder> {
+    static abstract class Builder<T extends RouplexTcpEndPoint, B extends Builder> {
         T instance;
         B builder;
 
@@ -113,7 +112,7 @@ class RouplexTcpHub implements Closeable {
         }
 
         public B withRouplexTcpClientLifecycleListener(
-                RouplexTcpConnectorLifecycleListener<RouplexTcpClient> rouplexTcpClientLifecycleListener) {
+                RouplexTcpEndPointListener<RouplexTcpClient> rouplexTcpClientLifecycleListener) {
             checkNotBuilt();
 
             instance.rouplexTcpClientLifecycleListener = rouplexTcpClientLifecycleListener;
@@ -168,6 +167,10 @@ class RouplexTcpHub implements Closeable {
 
     @Override
     public void close() throws IOException {
+        closeImpl(null);
+    }
+
+    protected void closeImpl(Exception reason) throws IOException {
         synchronized (lock) {
             if (isClosed()) {
                 return;
@@ -184,7 +187,7 @@ class RouplexTcpHub implements Closeable {
 
             if (rouplexTcpBinder != null) {
                 try {
-                    rouplexTcpBinder.asyncNotifyClosedTcpChannel(this);
+                    rouplexTcpBinder.asyncNotifyClosedTcpEndPoint(this, reason);
                 } catch (IOException ioe) {
                     if (pendingIOException == null) {
                         pendingIOException = ioe;
@@ -202,9 +205,9 @@ class RouplexTcpHub implements Closeable {
         }
     }
 
-    void closeSilently() {
+    void closeSilently(Exception reason) {
         try {
-            close();
+            closeImpl(reason);
         } catch (IOException ioe) {
         }
     }

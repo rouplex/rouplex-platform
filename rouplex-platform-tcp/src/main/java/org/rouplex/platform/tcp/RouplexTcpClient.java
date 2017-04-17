@@ -26,10 +26,10 @@ import java.util.concurrent.TimeUnit;
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class RouplexTcpClient extends RouplexTcpHub {
+public class RouplexTcpClient extends RouplexTcpEndPoint {
     static final ByteBuffer EOS = ByteBuffer.allocate(0);
 
-    public static class Builder extends RouplexTcpHub.Builder<RouplexTcpClient, Builder> {
+    public static class Builder extends RouplexTcpEndPoint.Builder<RouplexTcpClient, Builder> {
         Builder(RouplexTcpClient instance) {
             super(instance);
         }
@@ -228,7 +228,7 @@ public class RouplexTcpClient extends RouplexTcpHub {
                     // would imply the pause, or (3) fire them from within the locked space (at risk of deadlocks)
                     throttle.pause();
                 } catch (RuntimeException re) {
-                    closeSilently();
+                    closeSilently(re);
                 }
             }
         }
@@ -267,14 +267,14 @@ public class RouplexTcpClient extends RouplexTcpHub {
 
     private void handleEos() {
         if (throttledSender.eosApplied && throttledReceiver.eosReceived) {
-            closeSilently();
+            closeSilently(null); // a successful close
         }
     }
 
-    class NotificationForwarder implements RouplexTcpConnectorLifecycleListener<RouplexTcpClient> {
-        RouplexTcpConnectorLifecycleListener<RouplexTcpClient> proxy;
+    class NotificationForwarder implements RouplexTcpEndPointListener<RouplexTcpClient> {
+        RouplexTcpEndPointListener<RouplexTcpClient> proxy;
 
-        NotificationForwarder(RouplexTcpConnectorLifecycleListener<RouplexTcpClient> proxy) {
+        NotificationForwarder(RouplexTcpEndPointListener<RouplexTcpClient> proxy) {
             this.proxy = proxy;
         }
 
@@ -338,7 +338,7 @@ public class RouplexTcpClient extends RouplexTcpHub {
 
     private void connectAsync() throws IOException {
         init();
-        rouplexTcpBinder.asyncRegisterTcpChannel(this);
+        rouplexTcpBinder.asyncRegisterTcpEndPoint(this);
     }
 
     public SocketAddress getRemoteAddress(boolean resolved) throws IOException {
@@ -377,7 +377,7 @@ public class RouplexTcpClient extends RouplexTcpHub {
 
         rouplexTcpClientLifecycleListener = new NotificationForwarder(rouplexTcpClientLifecycleListener);
 
-        rouplexTcpBinder.asyncRegisterTcpChannel(this);
+        rouplexTcpBinder.asyncRegisterTcpEndPoint(this);
 
         synchronized (lock) {
             while (!creationComplete) {

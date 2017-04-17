@@ -12,10 +12,10 @@ import java.nio.channels.ServerSocketChannel;
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class RouplexTcpServer extends RouplexTcpHub {
+public class RouplexTcpServer extends RouplexTcpEndPoint {
     protected int backlog;
 
-    public static class Builder extends RouplexTcpHub.Builder<RouplexTcpServer, Builder> {
+    public static class Builder extends RouplexTcpEndPoint.Builder<RouplexTcpServer, Builder> {
         Builder(RouplexTcpServer instance) {
             super(instance);
         }
@@ -96,7 +96,7 @@ public class RouplexTcpServer extends RouplexTcpHub {
             serverSocketChannel.bind(localAddress, backlog);
         }
 
-        rouplexTcpBinder.asyncRegisterTcpChannel(this);
+        rouplexTcpBinder.asyncRegisterTcpEndPoint(this);
         return this;
     }
 }
