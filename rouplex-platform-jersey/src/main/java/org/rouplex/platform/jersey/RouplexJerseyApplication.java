@@ -29,16 +29,54 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 
-//import org.rouplex.platform.RouplexBinder;
-
 /**
  * This is the base class to be extended by the Rouplex applications
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class RouplexJerseyApplication extends ResourceConfig implements RouplexBinder {
+    class SwaggerBeanConfig extends BeanConfig {
+        private final Set<Class<?>> swaggerEnabledResources = new HashSet();
+
+        SwaggerBeanConfig() {
+            setVersion("1.0");
+            setTitle("Rouplex Services");
+        }
+
+        @Override
+        public Set<Class<?>> classes() {
+            return swaggerEnabledResources;
+        }
+
+        void addClass(Class<?> clazz) {
+            Collection<Class<?>> jerseyResources = new RouplexReflections(clazz).getSupperClasses(new Predicate<Class<?>>() {
+                @Override
+                public boolean test(Class<?> clazz) {
+                    return !new RouplexReflections(clazz).getDeclaredTypes(new Predicate<Class<?>>() {
+                        @Override
+                        public boolean test(Class<?> value) {
+                            return value.isAnnotationPresent(Path.class);
+                        }
+                    }).isEmpty();
+                }
+            });
+
+            swaggerEnabledResources.addAll(jerseyResources);
+        }
+
+        public void scan() {
+            if (!swaggerEnabledResources.isEmpty()) {
+                register(ApiListingResource.class);
+                register(SwaggerSerializers.class);
+
+                setBasePath(servletContext.getContextPath() + getApplicationPath());
+                setScan(true);
+            }
+        }
+    }
+
     private final ServletContext servletContext;
-    private final Set<Class<?>> swaggerEnabledResources = new HashSet();
+    private final SwaggerBeanConfig swaggerBeanConfig = new SwaggerBeanConfig();
 
     public RouplexJerseyApplication(@Context ServletContext servletContext) {
         this.servletContext = servletContext;
@@ -80,22 +118,7 @@ public class RouplexJerseyApplication extends ResourceConfig implements RouplexB
     }
 
     protected void initSwagger() {
-        if (!swaggerEnabledResources.isEmpty()) {
-            register(ApiListingResource.class);
-            register(SwaggerSerializers.class);
-
-            BeanConfig beanConfig = new BeanConfig() {
-                public Set<Class<?>> classes() {
-                    return swaggerEnabledResources;
-                }
-            };
-
-            beanConfig.setVersion("1.0.2");
-            beanConfig.setTitle("Rouplex Services");
-            beanConfig.setBasePath(servletContext.getContextPath() + getApplicationPath());
-
-            beanConfig.setScan(true);
-        }
+        swaggerBeanConfig.scan();
     }
 
     protected void initExceptionMapper() {
@@ -109,28 +132,19 @@ public class RouplexJerseyApplication extends ResourceConfig implements RouplexB
         });
     }
 
+    public BeanConfig getSwaggerBeanConfig() {
+        return swaggerBeanConfig;
+    }
+
     public void bindRouplexResource(Class<?> clazz, boolean enableSwagger) {
         register(clazz);
 
         if (enableSwagger) {
-            Collection<Class<?>> jerseyResources = new RouplexReflections(clazz).getSupperClasses(new Predicate<Class<?>>() {
-                @Override
-                public boolean test(Class<?> clazz) {
-                    return !new RouplexReflections(clazz).getDeclaredTypes(new Predicate<Class<?>>() {
-                        @Override
-                        public boolean test(Class<?> value) {
-                            return value.isAnnotationPresent(Path.class);
-                        }
-                    }).isEmpty();
-                }
-            });
-
-            swaggerEnabledResources.addAll(jerseyResources);
+            swaggerBeanConfig.addClass(clazz);
         }
 
-        // fish out coordinates of the resource being bound,
-        // create a RouplexService instance,
-        // and register it with the platform
+        // fish out coordinates of the resource being bound, create a RouplexService instance, and register it with the
+        // platform
         bindServiceProvider(new RouplexService() {
         });
     }

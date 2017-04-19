@@ -1,26 +1,38 @@
 package org.rouplex.platform.tcp;
 
 /**
- * A rouplexTcpConnector lifecycle listener
+ * A rouplexTcpClient lifecycle listener
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public interface RouplexTcpClientListener<T extends RouplexTcpEndPoint> {
+public interface RouplexTcpClientListener{
     /**
-     * A rouplexTcpConnector was created (connected/bound depending on context)
+     * A rouplexTcpClient was connected
      *
-     * @param rouplexTcpConnector
-     *          The rouplexTcpConnector object
+     * @param rouplexTcpClient
+     *          The rouplexTcpClient object
      */
-    void onCreated(T rouplexTcpConnector);
+    void onConnected(RouplexTcpClient rouplexTcpClient);
 
     /**
-     * A rouplexTcpConnector was destroyed (closed/connected/stopped depending on context)
+     * A rouplexTcpClient failed connection
      *
-     * @param rouplexTcpConnector
-     *          The rouplexTcpConnector object that was destroyed
+     * @param rouplexTcpClient
+     *          The rouplexTcpClient object
+     * @param reason
+     *          The reason for which rouplexTcpClient failed connection
+     */
+    void onConnectionFailed(RouplexTcpClient rouplexTcpClient, Exception reason);
+
+    /**
+     * A rouplexTcpClient was disconnected
+     *
+     * @param rouplexTcpClient
+     *          The rouplexTcpClient object
+     * @param optionalReason
+     *          The reason for which rouplexTcpClient disconnected, or null if this is the result of a user request
      * @param drainedChannels
      *          true if the channels were properly drained (input has read EOS and output has written EOS)
      */
-    void onDestroyed(T rouplexTcpConnector, boolean drainedChannels);
+    void onDisconnected(RouplexTcpClient rouplexTcpClient, Exception optionalReason, boolean drainedChannels);
 }
