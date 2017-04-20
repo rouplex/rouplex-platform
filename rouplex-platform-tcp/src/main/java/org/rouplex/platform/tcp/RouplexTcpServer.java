@@ -12,10 +12,11 @@ import java.nio.channels.ServerSocketChannel;
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class RouplexTcpServer extends RouplexTcpHub {
+public class RouplexTcpServer extends RouplexTcpEndPoint {
+    protected RouplexTcpServerListener rouplexTcpServerListener;
     protected int backlog;
 
-    public static class Builder extends RouplexTcpHub.Builder<RouplexTcpServer, Builder> {
+    public static class Builder extends RouplexTcpEndPoint.Builder<RouplexTcpServer, Builder> {
         Builder(RouplexTcpServer instance) {
             super(instance);
         }
@@ -51,8 +52,15 @@ public class RouplexTcpServer extends RouplexTcpHub {
             return builder;
         }
 
+        public Builder withRouplexTcpServerListener(RouplexTcpServerListener rouplexTcpServerListener) {
+            checkNotBuilt();
+
+            instance.rouplexTcpServerListener = rouplexTcpServerListener;
+            return builder;
+        }
+
         @Override
-        public RouplexTcpServer build() throws IOException {
+        public RouplexTcpServer buildAsync() throws IOException {
             checkNotBuilt();
             checkCanBuild();
 
@@ -96,7 +104,21 @@ public class RouplexTcpServer extends RouplexTcpHub {
             serverSocketChannel.bind(localAddress, backlog);
         }
 
-        rouplexTcpBinder.asyncRegisterTcpChannel(this);
+        rouplexTcpBinder.asyncRegisterTcpEndPoint(this);
         return this;
+    }
+
+    void handleBound() {
+        updateOpen(null);
+
+        if (rouplexTcpServerListener != null) {
+            rouplexTcpServerListener.onBound(this);
+        }
+    }
+
+    void handleUnBound() {
+        if (rouplexTcpServerListener != null) {
+            rouplexTcpServerListener.onUnBound(this);
+        }
     }
 }

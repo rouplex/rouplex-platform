@@ -1,6 +1,7 @@
 package org.rouplex.platform.tcp;
 
 import org.rouplex.commons.annotations.Final;
+import org.rouplex.commons.annotations.NotNull;
 import org.rouplex.commons.annotations.Nullable;
 
 import javax.net.ssl.SSLContext;
@@ -13,12 +14,11 @@ import java.net.UnknownHostException;
 import java.nio.channels.NetworkChannel;
 import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-class RouplexTcpHub implements Closeable {
+class RouplexTcpEndPoint implements Closeable {
     protected final Object lock = new Object();
 
     @Final
@@ -32,8 +32,6 @@ class RouplexTcpHub implements Closeable {
     @Final // set in build() if not set
     protected SelectableChannel selectableChannel;
     @Final
-    protected RouplexTcpConnectorLifecycleListener<RouplexTcpClient> rouplexTcpClientLifecycleListener;
-    @Final
     protected int sendBufferSize;
     @Final
     protected int receiveBufferSize;
@@ -43,15 +41,18 @@ class RouplexTcpHub implements Closeable {
     // not final, set and changed by user
     protected Object attachment;
 
-    protected boolean isClosed;
+    protected boolean open;
+    private boolean closed;
 
-    RouplexTcpHub(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder) {
+    private IOException ioException;
+
+    RouplexTcpEndPoint(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder) {
         this.selectableChannel = selectableChannel;
         this.rouplexTcpBinder = rouplexTcpBinder;
         sharedRouplexBinder = true;
     }
 
-    static abstract class Builder<T extends RouplexTcpHub, B extends Builder> {
+    static abstract class Builder<T extends RouplexTcpEndPoint, B extends Builder> {
         T instance;
         B builder;
 
@@ -60,7 +61,7 @@ class RouplexTcpHub implements Closeable {
             builder = (B) this;
         }
 
-        public abstract T build() throws IOException;
+        public abstract T buildAsync() throws IOException;
 
         protected void checkNotBuilt() {
             if (instance == null) {
@@ -112,17 +113,31 @@ class RouplexTcpHub implements Closeable {
             return builder;
         }
 
-        public B withRouplexTcpClientLifecycleListener(
-                RouplexTcpConnectorLifecycleListener<RouplexTcpClient> rouplexTcpClientLifecycleListener) {
-            checkNotBuilt();
-
-            instance.rouplexTcpClientLifecycleListener = rouplexTcpClientLifecycleListener;
-            return builder;
-        }
-        
         public B withAttachment(@Nullable Object attachment) {
             instance.attachment = attachment;
             return builder;
+        }
+
+        public T build() throws IOException {
+            return build(0);
+        }
+
+        /**
+         * Build the endpoint in a blocking manner.
+         *
+         * @param timeoutMillis
+         *          A non negative value for timeout, in milliseconds. The value 0 is interpreted as blocking
+         *          indefinitely until the endpoint is open or fails to open.
+         * @return
+         *          the built and open RouplexTcpEndPoint
+         * @throws IOException
+         *          If any exception is thrown during the process of building, or if the timeout has been reached and
+         *          the endpoint is not open yet.
+         */
+        public T build(int timeoutMillis) throws IOException {
+            T result = buildAsync();
+            result.waitForOpen(timeoutMillis > 0 ? timeoutMillis : Long.MAX_VALUE);
+            return result;
         }
     }
 
@@ -151,6 +166,39 @@ class RouplexTcpHub implements Closeable {
         }
     }
 
+    protected void waitForOpen(long expirationTimestamp) throws IOException {
+        synchronized (lock) {
+            while (!open) {
+                if (ioException != null) {
+                    throw ioException;
+                }
+
+                long waitMillis = expirationTimestamp - System.currentTimeMillis();
+                if (waitMillis <= 0) {
+                    handleClose(new IOException("Timeout"));
+                    // statement not reachable -- exception will be thrown
+                }
+
+                try {
+                    lock.wait(waitMillis);
+                } catch (InterruptedException ie) {
+                    throw new IOException("Interrupted");
+                }
+            }
+        }
+    }
+
+    protected void updateOpen(@Nullable Exception optionalException) {
+        synchronized (lock) {
+            if (!(open = optionalException == null)) {
+                ioException = optionalException instanceof IOException
+                        ? (IOException) optionalException : new IOException(optionalException);
+            }
+
+            lock.notifyAll();
+        }
+    }
+
     /**
      * This method is called from {@link RouplexTcpBinder} when the binder registers this channel.
      *
@@ -168,26 +216,34 @@ class RouplexTcpHub implements Closeable {
 
     @Override
     public void close() throws IOException {
+        handleClose(null);
+    }
+
+    protected void handleClose(@Nullable Exception optionalReason) throws IOException {
         synchronized (lock) {
             if (isClosed()) {
                 return;
             }
 
-            isClosed = true;
-            IOException pendingIOException = null;
+            closed = true;
+
+            if (ioException == null && optionalReason != null) {
+                ioException = optionalReason instanceof IOException
+                        ? (IOException) optionalReason : new IOException(optionalReason);
+            }
 
             try {
                 selectableChannel.close();
             } catch (IOException ioe) {
-                pendingIOException = ioe;
+                ioException = ioe;
             }
 
             if (rouplexTcpBinder != null) {
                 try {
-                    rouplexTcpBinder.asyncNotifyClosedTcpChannel(this);
+                    rouplexTcpBinder.asyncUnregisterTcpEndPoint(this, optionalReason);
                 } catch (IOException ioe) {
-                    if (pendingIOException == null) {
-                        pendingIOException = ioe;
+                    if (ioException == null) {
+                        ioException = ioe;
                     }
                 }
 
@@ -196,22 +252,22 @@ class RouplexTcpHub implements Closeable {
                 }
             }
 
-            if (pendingIOException != null) {
-                throw pendingIOException;
+            if (ioException != null) {
+                throw ioException;
             }
         }
     }
 
-    void closeSilently() {
+    void closeSilently(Exception reason) {
         try {
-            close();
+            handleClose(reason);
         } catch (IOException ioe) {
         }
     }
 
     public boolean isClosed() {
         synchronized (lock) {
-            return isClosed;
+            return closed;
         }
     }
 

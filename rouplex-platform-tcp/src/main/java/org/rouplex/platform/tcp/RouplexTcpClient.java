@@ -1,5 +1,6 @@
 package org.rouplex.platform.tcp;
 
+import org.rouplex.commons.annotations.NotNull;
 import org.rouplex.commons.annotations.Nullable;
 import org.rouplex.nio.channels.SSLSelector;
 import org.rouplex.nio.channels.SSLSocketChannel;
@@ -26,10 +27,11 @@ import java.util.concurrent.TimeUnit;
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class RouplexTcpClient extends RouplexTcpHub {
+public class RouplexTcpClient extends RouplexTcpEndPoint {
     static final ByteBuffer EOS = ByteBuffer.allocate(0);
+    protected RouplexTcpClientListener rouplexTcpClientListener;
 
-    public static class Builder extends RouplexTcpHub.Builder<RouplexTcpClient, Builder> {
+    public static class Builder extends RouplexTcpEndPoint.Builder<RouplexTcpClient, Builder> {
         Builder(RouplexTcpClient instance) {
             super(instance);
         }
@@ -66,16 +68,14 @@ public class RouplexTcpClient extends RouplexTcpHub {
             return builder;
         }
 
-        @Override
-        public RouplexTcpClient build() throws IOException {
+        public Builder withRouplexTcpClientListener(RouplexTcpClientListener rouplexTcpClientListener) {
             checkNotBuilt();
-            checkCanBuild();
 
-            RouplexTcpClient result = instance;
-            instance = null;
-            return result.connect();
+            instance.rouplexTcpClientListener = rouplexTcpClientListener;
+            return builder;
         }
 
+        @Override
         public RouplexTcpClient buildAsync() throws IOException {
             checkNotBuilt();
             checkCanBuild();
@@ -228,7 +228,7 @@ public class RouplexTcpClient extends RouplexTcpHub {
                     // would imply the pause, or (3) fire them from within the locked space (at risk of deadlocks)
                     throttle.pause();
                 } catch (RuntimeException re) {
-                    closeSilently();
+                    closeSilently(re);
                 }
             }
         }
@@ -267,42 +267,38 @@ public class RouplexTcpClient extends RouplexTcpHub {
 
     private void handleEos() {
         if (throttledSender.eosApplied && throttledReceiver.eosReceived) {
-            closeSilently();
+            closeSilently(null); // a successful close
         }
     }
 
-    class NotificationForwarder implements RouplexTcpConnectorLifecycleListener<RouplexTcpClient> {
-        RouplexTcpConnectorLifecycleListener<RouplexTcpClient> proxy;
+    void handleConnected() {
+        updateOpen(null);
 
-        NotificationForwarder(RouplexTcpConnectorLifecycleListener<RouplexTcpClient> proxy) {
-            this.proxy = proxy;
+        if (rouplexTcpClientListener != null) {
+            rouplexTcpClientListener.onConnected(this);
+        }
+    }
+
+    void handleConnectionFailed(@Nullable Exception optionalReason) {
+        if (rouplexTcpClientListener != null) {
+            rouplexTcpClientListener.onConnectionFailed(this, optionalReason);
+        }
+    }
+
+    boolean handleDisconnected(@Nullable Exception optionalReason) {
+        boolean drainedChannels = throttledReceiver.eosReceived && throttledSender.eosApplied;
+
+        if (rouplexTcpClientListener != null) {
+            rouplexTcpClientListener.onDisconnected(this, optionalReason, drainedChannels);
         }
 
-        @Override
-        public void onCreated(RouplexTcpClient rouplexTcpClient) {
-            synchronized (lock) {
-                creationComplete = true; // failure or success, does not matter
-                lock.notifyAll();
-            }
-
-            if (proxy != null) {
-                proxy.onCreated(rouplexTcpClient);
-            }
-        }
-
-        @Override
-        public void onDestroyed(RouplexTcpClient rouplexTcpClient, boolean drainedChannels) {
-            if (proxy != null) {
-                proxy.onDestroyed(rouplexTcpClient, drainedChannels);
-            }
-        }
+        return drainedChannels;
     }
 
     protected SocketAddress remoteAddress;
     protected ThrottledSender throttledSender;
     protected ThrottledReceiver throttledReceiver;
     protected RouplexTcpServer rouplexTcpServer; // if this channel was created by a rouplexTcpServer
-    boolean creationComplete;
 
     RouplexTcpClient(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder, RouplexTcpServer rouplexTcpServer) {
         super(selectableChannel, rouplexTcpBinder);
@@ -310,7 +306,7 @@ public class RouplexTcpClient extends RouplexTcpHub {
         this.rouplexTcpServer = rouplexTcpServer;
     }
 
-    private void init() throws IOException {
+    private void connectAsync() throws IOException {
         if (rouplexTcpBinder == null) {
             rouplexTcpBinder = new RouplexTcpBinder(sslContext == null ? Selector.open() : SSLSelector.open(), null);
         }
@@ -334,12 +330,10 @@ public class RouplexTcpClient extends RouplexTcpHub {
         if (!socketChannel.isConnectionPending() && !socketChannel.isConnected()) {
             socketChannel.connect(remoteAddress);
         }
+
+        rouplexTcpBinder.asyncRegisterTcpEndPoint(this);
     }
 
-    private void connectAsync() throws IOException {
-        init();
-        rouplexTcpBinder.asyncRegisterTcpChannel(this);
-    }
 
     public SocketAddress getRemoteAddress(boolean resolved) throws IOException {
         synchronized (lock) {
@@ -370,27 +364,6 @@ public class RouplexTcpClient extends RouplexTcpHub {
             throttledSender = new ThrottledSender();
             throttledReceiver = new ThrottledReceiver();
         }
-    }
-
-    private RouplexTcpClient connect() throws IOException {
-        init();
-
-        rouplexTcpClientLifecycleListener = new NotificationForwarder(rouplexTcpClientLifecycleListener);
-
-        rouplexTcpBinder.asyncRegisterTcpChannel(this);
-
-        synchronized (lock) {
-            while (!creationComplete) {
-                try {
-                    lock.wait();
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-            }
-        }
-
-        return this;
     }
 
     /**
