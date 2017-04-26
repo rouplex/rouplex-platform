@@ -22,7 +22,7 @@ public class ConfigurationTest {
     ConfigurationManager configurationManager = new ConfigurationManager();
     Configuration configuration = configurationManager.getConfiguration();
 
-    class MyConfigurationListener implements ConfigurationListener {
+    class MyConfigurationUpdateListener implements ConfigurationUpdateListener {
         List<Map.Entry<Enum, String>> values = new ArrayList<Map.Entry<Enum, String>>();
 
         @Override
@@ -37,7 +37,7 @@ public class ConfigurationTest {
 
     @Test
     public void test() throws Exception {
-        MyConfigurationListener myConfigurationListener = new MyConfigurationListener();
+        MyConfigurationUpdateListener myConfigurationListener = new MyConfigurationUpdateListener();
         try {
             configuration.get(SpecificConfigurationKeys.specificKey1);
             throw new Exception("A NoSuchElementException should have been thrown but it wasn't");
