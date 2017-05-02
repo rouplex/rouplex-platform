@@ -12,7 +12,7 @@ import java.util.*;
 public class ConfigurationTest {
     enum SpecificConfigurationKeys {
         specificKey1,
-        specificKey2;
+        specificKey2
     }
 
     enum MoreConfigurationKeys{

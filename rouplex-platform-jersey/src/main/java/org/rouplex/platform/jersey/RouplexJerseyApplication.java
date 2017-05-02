@@ -122,12 +122,28 @@ public class RouplexJerseyApplication extends ResourceConfig implements RouplexB
     }
 
     protected void initExceptionMapper() {
+        class E {
+            String exceptionClass;
+            String exceptionMessage;
+
+            E(Exception exception) {
+                this.exceptionClass = exception.getClass().toString();
+                this.exceptionMessage = exception.getMessage();
+            }
+
+            public String getExceptionClass() {
+                return exceptionClass;
+            }
+
+            public String getExceptionMessage() {
+                return exceptionMessage;
+            }
+        }
+
         register(new ExceptionMapper<Exception>() {
             @Override
             public Response toResponse(Exception e) {
-                return Response.status(500).entity(String.format(
-                        "{\"exceptionClass\": \"%s\", \"exceptionMessage\": \"%s\"}", e.getClass(), e.getMessage()))
-                        .build();
+                return Response.status(500).entity(new E(e)).build();
             }
         });
     }
@@ -160,3 +176,4 @@ public class RouplexJerseyApplication extends ResourceConfig implements RouplexB
         // register this with the platform
     }
 }
+
