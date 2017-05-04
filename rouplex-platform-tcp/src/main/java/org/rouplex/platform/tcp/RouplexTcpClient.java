@@ -1,6 +1,5 @@
 package org.rouplex.platform.tcp;
 
-import org.rouplex.commons.annotations.NotNull;
 import org.rouplex.commons.annotations.Nullable;
 import org.rouplex.nio.channels.SSLSelector;
 import org.rouplex.nio.channels.SSLSocketChannel;
@@ -180,8 +179,12 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
             int writeSize;
 
             synchronized (lock) {
-                if (eosReceived || isClosed()) {
+                if (eosReceived) {
                     throw new IOException("Sender is closed");
+                }
+
+                if (isClosed()) {
+                    throw new IOException("TcpClient is closed");
                 }
 
                 if (payload == null) { // null is marker for client (abrupt) close
