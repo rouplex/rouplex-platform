@@ -92,10 +92,12 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
         }
 
         if (sendBufferSize != 0) {
-            // hmm interesting, serverSocket doesn't have sendBufferSize
+            // serverSocket doesn't have sendBufferSize, we set this value on individually accepted sockets anyway
             // serverSocketChannel.socket().setSendBufferSize(sendBufferSize);
         }
         if (receiveBufferSize != 0) {
+            // receiveBufferSize is not honored (at least in macosx where I am developing/testing),
+            // we set this value on individually accepted sockets again anyway
             serverSocketChannel.socket().setReceiveBufferSize(receiveBufferSize);
         }
 
