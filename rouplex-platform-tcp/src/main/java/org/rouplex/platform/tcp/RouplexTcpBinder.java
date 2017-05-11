@@ -308,8 +308,14 @@ public class RouplexTcpBinder implements Closeable {
             if (selectionKey.isAcceptable()) {
                 SocketChannel socketChannel = ((ServerSocketChannel) selectionKey.channel()).accept();
                 RouplexTcpServer rouplexTcpServer = (RouplexTcpServer) selectionKey.attachment();
-                socketChannel.socket().setSendBufferSize(rouplexTcpServer.sendBufferSize);
-                socketChannel.socket().setReceiveBufferSize(rouplexTcpServer.receiveBufferSize);
+
+                if (rouplexTcpServer.sendBufferSize != 0) {
+                    socketChannel.socket().setSendBufferSize(rouplexTcpServer.sendBufferSize);
+                }
+                if (rouplexTcpServer.receiveBufferSize != 0) {
+                    socketChannel.socket().setReceiveBufferSize(rouplexTcpServer.receiveBufferSize);
+                }
+
                 registerTcpEndPoint(new RouplexTcpClient(socketChannel, RouplexTcpBinder.this, rouplexTcpServer));
                 return;
             }

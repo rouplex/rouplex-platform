@@ -1,7 +1,6 @@
 package org.rouplex.platform.tcp;
 
 import org.rouplex.commons.annotations.Final;
-import org.rouplex.commons.annotations.NotNull;
 import org.rouplex.commons.annotations.Nullable;
 
 import javax.net.ssl.SSLContext;
@@ -102,14 +101,14 @@ class RouplexTcpEndPoint implements Closeable {
         public B withSendBufferSize(int sendBufferSize) {
             checkNotBuilt();
 
-            instance.sendBufferSize = sendBufferSize;
+            instance.sendBufferSize = sendBufferSize > 0 ? sendBufferSize : 0;
             return builder;
         }
 
         public B withReceiveBufferSize(int receiveBufferSize) {
             checkNotBuilt();
 
-            instance.receiveBufferSize = receiveBufferSize;
+            instance.receiveBufferSize = receiveBufferSize > 0 ? receiveBufferSize : 0;
             return builder;
         }
 
