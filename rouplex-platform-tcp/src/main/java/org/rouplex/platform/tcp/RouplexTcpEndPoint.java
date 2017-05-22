@@ -1,6 +1,5 @@
 package org.rouplex.platform.tcp;
 
-import org.rouplex.commons.annotations.Final;
 import org.rouplex.commons.annotations.Nullable;
 
 import javax.net.ssl.SSLContext;
@@ -18,52 +17,26 @@ import java.nio.channels.SelectionKey;
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 class RouplexTcpEndPoint implements Closeable {
-    protected final Object lock = new Object();
-
-    @Final
-    protected SocketAddress localAddress;
-    @Final
-    protected RouplexTcpBinder rouplexTcpBinder;
-    @Final
-    protected SSLContext sslContext;
-    @Final
-    protected boolean sharedRouplexBinder;
-    @Final // set in build() if not set
-    protected SelectableChannel selectableChannel;
-    @Final
-    protected int sendBufferSize;
-    @Final
-    protected int receiveBufferSize;
-
-    // not final, it is set from binder
-    protected SelectionKey selectionKey;
-    // not final, set and changed by user
-    protected Object attachment;
-
-    protected boolean open;
-    private boolean closed;
-
-    private IOException ioException;
-
-    RouplexTcpEndPoint(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder) {
-        this.selectableChannel = selectableChannel;
-        this.rouplexTcpBinder = rouplexTcpBinder;
-        sharedRouplexBinder = true;
-    }
-
     static abstract class Builder<T extends RouplexTcpEndPoint, B extends Builder> {
-        T instance;
-        B builder;
+        protected SocketAddress localAddress;
+        protected RouplexTcpBinder rouplexTcpBinder;
+        protected int sendBufferSize;
+        protected int receiveBufferSize;
+        protected Object attachment;
 
-        Builder(T instance) {
-            this.instance = instance;
+        protected SSLContext sslContext;
+        protected SelectableChannel selectableChannel;
+
+        protected B builder;
+
+        Builder() {
             builder = (B) this;
         }
 
         public abstract T buildAsync() throws IOException;
 
         protected void checkNotBuilt() {
-            if (instance == null) {
+            if (builder == null) {
                 throw new IllegalStateException("Already built. Create a new builder to build a new instance.");
             }
         }
@@ -71,15 +44,14 @@ class RouplexTcpEndPoint implements Closeable {
         public B withRouplexTcpBinder(RouplexTcpBinder rouplexTcpBinder) {
             checkNotBuilt();
 
-            instance.rouplexTcpBinder = rouplexTcpBinder;
-            instance.sharedRouplexBinder = rouplexTcpBinder != null;
+            this.rouplexTcpBinder = rouplexTcpBinder;
             return builder;
         }
 
         public B withLocalAddress(SocketAddress localAddress) {
             checkNotBuilt();
 
-            instance.localAddress = localAddress;
+            this.localAddress = localAddress;
             return builder;
         }
 
@@ -94,26 +66,26 @@ class RouplexTcpEndPoint implements Closeable {
                 }
             }
 
-            instance.localAddress = new InetSocketAddress(hostname, port);
+            this.localAddress = new InetSocketAddress(hostname, port);
             return builder;
         }
 
         public B withSendBufferSize(int sendBufferSize) {
             checkNotBuilt();
 
-            instance.sendBufferSize = sendBufferSize > 0 ? sendBufferSize : 0;
+            this.sendBufferSize = sendBufferSize > 0 ? sendBufferSize : 0;
             return builder;
         }
 
         public B withReceiveBufferSize(int receiveBufferSize) {
             checkNotBuilt();
 
-            instance.receiveBufferSize = receiveBufferSize > 0 ? receiveBufferSize : 0;
+            this.receiveBufferSize = receiveBufferSize > 0 ? receiveBufferSize : 0;
             return builder;
         }
 
         public B withAttachment(@Nullable Object attachment) {
-            instance.attachment = attachment;
+            this.attachment = attachment;
             return builder;
         }
 
@@ -135,9 +107,45 @@ class RouplexTcpEndPoint implements Closeable {
          */
         public T build(int timeoutMillis) throws IOException {
             T result = buildAsync();
+            builder = null;
             result.waitForOpen(timeoutMillis > 0 ? timeoutMillis : Long.MAX_VALUE);
             return result;
         }
+    }
+
+    protected final Builder builder;
+    protected final Object lock = new Object();
+    protected final boolean sharedRouplexBinder;
+    protected final RouplexTcpBinder rouplexTcpBinder;
+    protected final RouplexTcpSelector rouplexTcpSelector;
+    protected final SelectableChannel selectableChannel;
+
+    // not final, it is set from binder
+    protected SelectionKey selectionKey;
+    // not final, set and changed by user
+    protected Object attachment;
+
+    protected boolean open;
+    private boolean closed;
+
+    private IOException ioException;
+
+    protected <T extends RouplexTcpEndPoint, B extends Builder> RouplexTcpEndPoint(Builder<T, B> builder) {
+        this.builder = builder;
+        this.sharedRouplexBinder = builder.rouplexTcpBinder != null;
+        this.rouplexTcpBinder = sharedRouplexBinder ? builder.rouplexTcpBinder : new RouplexTcpBinder();
+        this.rouplexTcpSelector = rouplexTcpBinder.nextRouplexTcpSelector();
+        this.selectableChannel = builder.selectableChannel;
+        this.attachment = builder.attachment;
+    }
+
+    RouplexTcpEndPoint(SelectableChannel selectableChannel, RouplexTcpSelector rouplexTcpSelector) {
+        builder = null;
+        this.sharedRouplexBinder = true;
+        this.rouplexTcpBinder = rouplexTcpSelector.rouplexTcpBinder;
+        this.rouplexTcpSelector = rouplexTcpSelector;
+
+        this.selectableChannel = selectableChannel;
     }
 
     public RouplexTcpBinder getRouplexTcpBinder() {
@@ -161,7 +169,7 @@ class RouplexTcpEndPoint implements Closeable {
                 throw new IOException("Not bound yet");
             }
 
-            return localAddress;
+            return builder != null ? builder.localAddress : null;
         }
     }
 
@@ -237,9 +245,9 @@ class RouplexTcpEndPoint implements Closeable {
                 ioException = ioe;
             }
 
-            if (rouplexTcpBinder != null) {
+            if (rouplexTcpSelector != null) {
                 try {
-                    rouplexTcpBinder.asyncUnregisterTcpEndPoint(this, optionalReason);
+                    rouplexTcpSelector.asyncUnregisterTcpEndPoint(this, optionalReason);
                 } catch (IOException ioe) {
                     if (ioException == null) {
                         ioException = ioe;

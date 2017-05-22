@@ -5,7 +5,6 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import org.aspectj.lang.ProceedingJoinPoint;
 
-import java.nio.ByteBuffer;
 import java.util.ConcurrentModificationException;
 import java.util.logging.Logger;
 
@@ -62,7 +61,15 @@ public class RouplexTcpBinderReporter {
 
                             try {
                                 for (RouplexTcpBinder tcpBinder : aopInstrumentor.tcpBinders.keySet()) {
-                                    totalKeys += tcpBinder.selector.keys().size();
+                                    RouplexTcpSelector markedTcpSelector = tcpBinder.nextRouplexTcpSelector();
+
+                                    while (true) {
+                                        RouplexTcpSelector tcpSelector = tcpBinder.nextRouplexTcpSelector();
+                                        totalKeys += tcpSelector.selector.keys().size();
+                                        if (tcpSelector == markedTcpSelector) {
+                                            break;
+                                        }
+                                    }
                                 }
                             } catch (ConcurrentModificationException cme) {
                                 // no biggie return whatever, rather than synchronize and get on tests way

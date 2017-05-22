@@ -1,7 +1,6 @@
 package org.rouplex.platform.tcp;
 
 import org.rouplex.commons.annotations.Nullable;
-import org.rouplex.nio.channels.SSLSelector;
 import org.rouplex.nio.channels.SSLSocketChannel;
 import org.rouplex.platform.io.Receiver;
 import org.rouplex.platform.io.Sender;
@@ -14,9 +13,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
@@ -27,16 +24,15 @@ import java.util.concurrent.TimeUnit;
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class RouplexTcpClient extends RouplexTcpEndPoint {
-    static final ByteBuffer EOS = ByteBuffer.allocate(0);
-    protected RouplexTcpClientListener rouplexTcpClientListener;
+    protected final static byte[] EOS_BA = new byte[0];
+    private static final ByteBuffer EOS_BB = ByteBuffer.allocate(0);
 
     public static class Builder extends RouplexTcpEndPoint.Builder<RouplexTcpClient, Builder> {
-        Builder(RouplexTcpClient instance) {
-            super(instance);
-        }
+        protected SocketAddress remoteAddress;
+        protected RouplexTcpClientListener rouplexTcpClientListener;
 
         protected void checkCanBuild() {
-            if (instance.remoteAddress == null) {
+            if (remoteAddress == null) {
                 throw new IllegalStateException("Missing value for remoteAddress");
             }
         }
@@ -44,33 +40,33 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
         public Builder withSocketChannel(SocketChannel socketChannel) {
             checkNotBuilt();
 
-            instance.selectableChannel = socketChannel;
+            this.selectableChannel = socketChannel;
             return builder;
         }
 
         public Builder withRemoteAddress(SocketAddress remoteAddress) {
             checkNotBuilt();
-            instance.remoteAddress = remoteAddress;
+            this.remoteAddress = remoteAddress;
             return builder;
         }
 
         public Builder withRemoteAddress(String hostname, int port) {
             checkNotBuilt();
-            instance.remoteAddress = new InetSocketAddress(hostname, port);
+            this.remoteAddress = new InetSocketAddress(hostname, port);
             return builder;
         }
 
         public Builder withSecure(boolean secure, @Nullable SSLContext sslContext) throws IOException {
             checkNotBuilt();
 
-            instance.sslContext = secure ? sslContext != null ? sslContext : buildRelaxedSSLContext() : null;
+            this.sslContext = secure ? sslContext != null ? sslContext : buildRelaxedSSLContext() : null;
             return builder;
         }
 
         public Builder withRouplexTcpClientListener(RouplexTcpClientListener rouplexTcpClientListener) {
             checkNotBuilt();
 
-            instance.rouplexTcpClientListener = rouplexTcpClientListener;
+            this.rouplexTcpClientListener = rouplexTcpClientListener;
             return builder;
         }
 
@@ -79,15 +75,20 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
             checkNotBuilt();
             checkCanBuild();
 
-            RouplexTcpClient result = instance;
-            instance = null;
+            if (selectableChannel == null) {
+                selectableChannel = sslContext == null
+                        ? SocketChannel.open() : SSLSocketChannel.open(sslContext);
+            }
+
+            RouplexTcpClient result = new RouplexTcpClient(this);
+            builder = null;
             result.connectAsync();
             return result;
         }
     }
 
     public static Builder newBuilder() {
-        return new Builder(new RouplexTcpClient(null, null, null));
+        return new Builder();
     }
 
     class ThrottledReceiver extends Throttle {
@@ -110,13 +111,13 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
 
         @Override
         public boolean pause() {
-            rouplexTcpBinder.asyncPauseRead(selectionKey, Long.MAX_VALUE); // 295 million years
+            rouplexTcpSelector.asyncPauseRead(selectionKey, Long.MAX_VALUE); // 295 million years
             return true;
         }
 
         @Override
         public void resume() {
-            rouplexTcpBinder.asyncResumeRead(selectionKey);
+            rouplexTcpSelector.asyncResumeRead(selectionKey);
         }
 
         boolean consumeSocketInput(byte[] payload) {
@@ -133,12 +134,12 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
                 } else {
                     rateLimitCurrentBytes += payload.length;
                     if (rateLimitCurrentBytes > rateLimitBytes) {
-                        rouplexTcpBinder.asyncPauseRead(selectionKey, rateLimitCurrentTimestamp);
+                        rouplexTcpSelector.asyncPauseRead(selectionKey, rateLimitCurrentTimestamp);
                     }
                 }
             }
 
-            if (eosReceived = payload == RouplexTcpBinder.EOS) {
+            if (eosReceived = payload == EOS_BA) {
                 handleEos();
             }
 
@@ -148,12 +149,20 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
 
     class ThrottledSender implements Sender<ByteBuffer> {
         private final LinkedList<ByteBuffer> writeBuffers = new LinkedList<ByteBuffer>();
-        private long remaining = sendBufferSize != 0 ? sendBufferSize : 256 * 1024;
+        private long remaining;
         @Nullable
         Throttle throttle;
         boolean paused;
         boolean eosReceived;
         boolean eosApplied;
+
+        ThrottledSender() {
+            try {
+                remaining = ((SocketChannel) selectableChannel).socket().getSendBufferSize();
+            } catch (IOException ioe) {
+                throw new RuntimeException(ioe);
+            }
+        }
 
         private int transfer(ByteBuffer source, ByteBuffer destination) {
             int srcRemaining;
@@ -193,7 +202,7 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
                 }
 
                 if (!payload.hasRemaining()) { // empty buffer is marker for channel (graceful) close
-                    payload = EOS;
+                    payload = EOS_BB;
                     eosReceived = true;
                 } else if (paused) { // don't remove else keyword since we must always accept the EOS for delivery
                     return;
@@ -205,7 +214,7 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
             }
 
             ByteBuffer writeBuffer;
-            if (payload != EOS) {
+            if (payload != EOS_BB) {
                 // potentially costly operations in this block so we must perform outside the lock space especially
                 // since the removeWriteBuffer is performed from the RouplexTcpBinder's single thread responsible to go
                 // over all the channels monitored!!!
@@ -213,7 +222,7 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
                 transfer(payload, writeBuffer);
                 writeBuffer.flip();
             } else {
-                writeBuffer = EOS;
+                writeBuffer = EOS_BB;
             }
 
             Throttle throttle;
@@ -222,7 +231,7 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
                 throttle = paused ? this.throttle : null;
             }
 
-            rouplexTcpBinder.asyncResumeWrite(selectionKey);
+            rouplexTcpSelector.asyncResumeWrite(selectionKey);
 
             if (throttle != null) {
                 try {
@@ -261,7 +270,7 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
                 throttle.resume();
             }
 
-            if (writeBuffer == EOS) {
+            if (writeBuffer == EOS_BB) {
                 eosApplied = true;
                 handleEos();
             }
@@ -298,45 +307,36 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
         return drainedChannels;
     }
 
-    protected SocketAddress remoteAddress;
+    protected final RouplexTcpServer rouplexTcpServer; // if this channel was created by a rouplexTcpServer
+    protected final RouplexTcpClientListener rouplexTcpClientListener;
+
     protected ThrottledSender throttledSender;
     protected ThrottledReceiver throttledReceiver;
-    protected RouplexTcpServer rouplexTcpServer; // if this channel was created by a rouplexTcpServer
 
-    RouplexTcpClient(SelectableChannel selectableChannel, RouplexTcpBinder rouplexTcpBinder, RouplexTcpServer rouplexTcpServer) {
-        super(selectableChannel, rouplexTcpBinder);
+    RouplexTcpClient(Builder builder) {
+        super(builder);
+
+        this.rouplexTcpServer = null;
+        this.rouplexTcpClientListener = builder.rouplexTcpClientListener;
+    }
+
+    RouplexTcpClient(SocketChannel socketChannel, RouplexTcpSelector rouplexTcpSelector, RouplexTcpServer rouplexTcpServer) {
+        super(socketChannel, rouplexTcpSelector);
 
         this.rouplexTcpServer = rouplexTcpServer;
+        this.rouplexTcpClientListener = null;
     }
 
     private void connectAsync() throws IOException {
-        if (rouplexTcpBinder == null) {
-            rouplexTcpBinder = new RouplexTcpBinder(sslContext == null ? Selector.open() : SSLSelector.open(), null);
-        }
-
-        SocketChannel socketChannel;
-        if (selectableChannel != null) {
-            socketChannel = (SocketChannel) selectableChannel;
-        } else {
-            socketChannel = sslContext == null ? SocketChannel.open() : SSLSocketChannel.open(sslContext);
-            selectableChannel = socketChannel;
-        }
-
-        if (sendBufferSize != 0) {
-            socketChannel.socket().setSendBufferSize(sendBufferSize);
-        }
-        if (receiveBufferSize != 0) {
-            socketChannel.socket().setReceiveBufferSize(receiveBufferSize);
-        }
+        SocketChannel socketChannel = (SocketChannel) selectableChannel;
 
         socketChannel.configureBlocking(false);
         if (!socketChannel.isConnectionPending() && !socketChannel.isConnected()) {
-            socketChannel.connect(remoteAddress);
+            socketChannel.connect(((Builder) builder).remoteAddress);
         }
 
-        rouplexTcpBinder.asyncRegisterTcpEndPoint(this);
+        rouplexTcpSelector.asyncRegisterTcpEndPoint(this);
     }
-
 
     public SocketAddress getRemoteAddress(boolean resolved) throws IOException {
         synchronized (lock) {
@@ -355,7 +355,7 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
                 throw new IOException("Not connected yet");
             }
 
-            return remoteAddress;
+            return builder != null ? ((Builder) builder).remoteAddress : null;
         }
     }
 

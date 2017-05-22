@@ -1,28 +1,22 @@
 package org.rouplex.platform.tcp;
 
 import org.rouplex.commons.annotations.Nullable;
-import org.rouplex.nio.channels.SSLSelector;
 import org.rouplex.nio.channels.SSLServerSocketChannel;
 
 import javax.net.ssl.SSLContext;
 import java.io.IOException;
-import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class RouplexTcpServer extends RouplexTcpEndPoint {
-    protected RouplexTcpServerListener rouplexTcpServerListener;
-    protected int backlog;
-
     public static class Builder extends RouplexTcpEndPoint.Builder<RouplexTcpServer, Builder> {
-        Builder(RouplexTcpServer instance) {
-            super(instance);
-        }
+        protected int backlog;
+        protected RouplexTcpServerListener rouplexTcpServerListener;
 
         protected void checkCanBuild() {
-            if (instance.localAddress == null) {
+            if (localAddress == null) {
                 throw new IllegalStateException("Missing value for localAddress"); // maybe remove this constraint
             }
         }
@@ -30,13 +24,14 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
         public Builder withServerSocketChannel(ServerSocketChannel serverSocketChannel) {
             checkNotBuilt();
 
-            instance.selectableChannel = serverSocketChannel;
+            this.selectableChannel = serverSocketChannel;
             return builder;
         }
 
         public Builder withBacklog(int backlog) {
             checkNotBuilt();
-            instance.backlog = backlog;
+
+            this.backlog = backlog;
             return builder;
         }
 
@@ -44,7 +39,7 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
             checkNotBuilt();
 
             try {
-                instance.sslContext = secure ? sslContext != null ? sslContext : SSLContext.getDefault() : null;
+                this.sslContext = secure ? sslContext != null ? sslContext : SSLContext.getDefault() : null;
             } catch (Exception e) {
                 throw new IOException("Could not create SSLContext.", e);
             }
@@ -55,7 +50,7 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
         public Builder withRouplexTcpServerListener(RouplexTcpServerListener rouplexTcpServerListener) {
             checkNotBuilt();
 
-            instance.rouplexTcpServerListener = rouplexTcpServerListener;
+            this.rouplexTcpServerListener = rouplexTcpServerListener;
             return builder;
         }
 
@@ -64,49 +59,48 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
             checkNotBuilt();
             checkCanBuild();
 
-            RouplexTcpServer result = instance;
-            instance = null;
+            if (selectableChannel == null) {
+                selectableChannel = sslContext == null
+                        ? ServerSocketChannel.open() : SSLServerSocketChannel.open(sslContext);
+            }
+
+            RouplexTcpServer result = new RouplexTcpServer(this);
+            builder = null;
             return result.start();
         }
     }
 
     public static Builder newBuilder() {
-        return new Builder(new RouplexTcpServer(null, null));
+        return new Builder();
     }
 
-    RouplexTcpServer(ServerSocketChannel serverSocketChannel, RouplexTcpBinder rouplexTcpBinder) {
-        super(serverSocketChannel, rouplexTcpBinder);
+    protected final int sendBufferSize;
+    protected final int receiveBufferSize;
+    protected final RouplexTcpServerListener rouplexTcpServerListener;
+
+    RouplexTcpServer(Builder builder) {
+        super(builder);
+
+        this.sendBufferSize = builder.sendBufferSize;
+        this.receiveBufferSize = builder.receiveBufferSize;
+        this.rouplexTcpServerListener = builder.rouplexTcpServerListener;
     }
 
     private RouplexTcpServer start() throws IOException {
-        if (rouplexTcpBinder == null) {
-            rouplexTcpBinder = new RouplexTcpBinder(sslContext == null ? Selector.open() : SSLSelector.open(), null);
-        }
+        ServerSocketChannel serverSocketChannel = (ServerSocketChannel) selectableChannel;
 
-        ServerSocketChannel serverSocketChannel;
-        if (selectableChannel != null) {
-            serverSocketChannel = (ServerSocketChannel) selectableChannel;
-        } else {
-            serverSocketChannel = sslContext == null ? ServerSocketChannel.open() : SSLServerSocketChannel.open(sslContext);
-            selectableChannel = serverSocketChannel;
-        }
-
-        if (sendBufferSize != 0) {
-            // serverSocket doesn't have sendBufferSize, we set this value on individually accepted sockets anyway
-            // serverSocketChannel.socket().setSendBufferSize(sendBufferSize);
-        }
-        if (receiveBufferSize != 0) {
-            // receiveBufferSize is not honored (at least in macosx where I am developing/testing),
-            // we set this value on individually accepted sockets again anyway
-            serverSocketChannel.socket().setReceiveBufferSize(receiveBufferSize);
+        if (builder.receiveBufferSize != 0) {
+            // serverSocket doesn't have sendBufferSize, and receiveBufferSize is not honored (at least in macosx
+            // where I am developing/testing), we set this value on individually accepted sockets again anyway
+            serverSocketChannel.socket().setReceiveBufferSize(builder.receiveBufferSize);
         }
 
         serverSocketChannel.configureBlocking(false);
         if (!serverSocketChannel.socket().isBound()) {
-            serverSocketChannel.bind(localAddress, backlog);
+            serverSocketChannel.bind(builder.localAddress, ((Builder) builder).backlog);
         }
 
-        rouplexTcpBinder.asyncRegisterTcpEndPoint(this);
+        rouplexTcpSelector.asyncRegisterTcpEndPoint(this);
         return this;
     }
 
