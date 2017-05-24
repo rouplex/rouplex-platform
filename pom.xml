@@ -9,9 +9,62 @@
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
+    <name>Rouplex Platform</name>
+    <description>
+        A platform for discovery and communication between various parts of a distributed service or application.
+
+        At its minimum, the platform is a library which can be used to serialize and deserialize application constructs
+        into payloads which it can then send to and receive from remote endpoints. For now it supports TCP and HTTP
+        communication protocols with WebSockets coming soon. It supports raw byte streams via TCP, as well as
+        application/json via JAX-RS as serialization protocols. It offers plain or SSL/TLS communication for security
+        of your data in transit. For now it is only available in Java, with bindings for other languages coming soon.
+        The communication pattern is request-reply, with fail fast semantics, and with service consumers (clients)
+        knowing beforehand the coordinates of the service providers (servers). Blocking API is available with all
+        communication protocols and unblocking/asynchronous flavors are available with TCP communication protocol.
+
+        The platform can also be used as a service, in which case a Discovery Service facilitates registration of the
+        service providers (servers) and service consumers (clients). In this case, the callers don't need to resolve or
+        even balance their calls towards various endpoints, since the Platform handles this tasks. In this case, the
+        pub/sub communication pattern will also be available (coming soon) with at-most-once delivery guarantees.
+
+        We intend to provide a Security Service for managing the keys/and certificates of various services as well as
+        Metrics and Logging services (coming soon).
+    </description>
+    <url>https://github.com/rouplex/rouplex-platform</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
+
+    <scm>
+        <url>https://github.com/rouplex/rouplex-platform</url>
+    </scm>
+
+    <developers>
+        <developer>
+            <name>Andi Mullaraj</name>
+            <email>andimullaraj@gmail.com</email>
+        </developer>
+    </developers>
+
+    <distributionManagement>
+        <snapshotRepository>
+            <id>ossrh</id>
+            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+        </snapshotRepository>
+        <repository>
+            <id>ossrh</id>
+            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+        </repository>
+    </distributionManagement>
 
     <build>
         <plugins>
@@ -41,22 +94,60 @@
                     </execution>
                 </executions>
             </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-source-plugin</artifactId>
-                <version>3.0.1</version>
-                <executions>
-                    <execution>
-                        <id>attach-sources</id>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.0.1</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>2.10.4</version>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>1.5</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
     <modules>
         <module>rouplex-commons</module>

@@ -1,6 +1,8 @@
 package org.rouplex.commons;
 
 /**
+ * Some useful, basic functionality.
+ *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class Objects {

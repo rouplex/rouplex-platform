@@ -3,7 +3,7 @@ package org.rouplex.commons.annotations;
 import java.lang.annotation.*;
 
 /**
- * Copied from apache commons, for now, might remove soon
+ * A not-checked annotation for documenting purposes only.  Copied from apache commons, for now, might remove later.
  */
 @Documented
 @Target({ElementType.TYPE})

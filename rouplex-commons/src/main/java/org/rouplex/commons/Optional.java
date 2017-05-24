@@ -3,7 +3,7 @@ package org.rouplex.commons;
 import java.util.NoSuchElementException;
 
 /**
- * Copied from java8
+ * A useful construct copied from java8 for use with older jdks such as 1.6
  */
 public final class Optional<T> {
     /**
@@ -29,11 +29,6 @@ public final class Optional<T> {
     /**
      * Returns an empty {@code Optional} instance.  No value is present for this
      * Optional.
-     *
-     * @apiNote Though it may be tempting to do so, avoid testing if an object
-     * is empty by comparing with {@code ==} against instances returned by
-     * {@code Option.empty()}. There is no guarantee that it is a singleton.
-     * Instead, use {@link #isPresent()}.
      *
      * @param <T> Type of the non-existent value
      * @return an empty {@code Optional}
@@ -114,8 +109,8 @@ public final class Optional<T> {
     /**
      * Return the value if present, otherwise return {@code other}.
      *
-     * @param other the value to be returned if there is no value present, may
-     * be null
+     * @param
+     *         other the value to be returned if there is no value present, may be null
      * @return the value, if present, otherwise {@code other}
      */
     public T orElse(T other) {

@@ -3,6 +3,8 @@ package org.rouplex.commons.annotations;
 import java.lang.annotation.*;
 
 /**
+ * A not-checked annotation for documenting purposes only.
+ * 
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 @Documented

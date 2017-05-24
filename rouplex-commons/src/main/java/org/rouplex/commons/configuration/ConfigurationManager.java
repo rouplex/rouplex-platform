@@ -22,8 +22,10 @@ public class ConfigurationManager implements Closeable {
      * Put a configuration entry, possibly replacing an old or inherited entry. If upstream configurations contain the
      * same entry, their value will be overridden by this one.
      *
-     * @param key the key for the entry to be added or replaced
-     * @param value the value of the entry
+     * @param key
+     *          the key for the entry to be added or replaced
+     * @param value
+     *          the value of the entry
      */
     public void putConfigurationEntry(Enum key, @Nullable String value) {
         configuration.putConfigurationEntry(key, value);
@@ -35,7 +37,8 @@ public class ConfigurationManager implements Closeable {
      * If upstream configurations contain the same entry, their value will become visible now. If more than one upstream
      * configuration contains the same entry, it is unspecified which one will win.
      *
-     * @param key the key for the entry to be removed
+     * @param key
+     *          the key for the entry to be removed
      */
     public void removeConfigurationEntry(Enum key) {
         configuration.removeConfigurationEntry(key);
@@ -51,6 +54,7 @@ public class ConfigurationManager implements Closeable {
      * Events related to upstream updates will be forwarded to listeners of this configuration as well.
      *
      * @param configuration
+     *          the configuration to be merged in
      */
     public void mergeConfiguration(Configuration configuration) {
         this.configuration.mergeConfiguration(configuration);
@@ -59,7 +63,8 @@ public class ConfigurationManager implements Closeable {
     /**
      * Get the {@link Configuration} instance which can be used to access values created or updated via this class.
      *
-     * @return the related {@link Configuration} instance
+     * @return
+     *          the related {@link Configuration} instance
      */
     public Configuration getConfiguration() {
         return configuration;

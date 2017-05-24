@@ -3,20 +3,20 @@ package org.rouplex.platform.io;
 import java.io.IOException;
 
 /**
- * A channel which can handleRequest payloads of a generic type.
+ * A sender which can send payloads of a generic type. This interface makes no assumptions about the payload
+ * structure or size, whether it can be null or not, whether the callee is supposed to handle it promptly or not; it is
+ * up to the implementing classes to define those semantics.
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public interface Sender<T> {
     /**
-     * Send the payload. This is a non blocking call, and the payload type T must provide a way to expose the amount
-     * of the data sent.
+     * Send the payload of a generic type.
      *
      * @param payload
-     *          The payload to be sent.
+     *          the payload to be sent
      * @throws IOException
-     *          If this channel is closed (either by a previous call {@link #send(Object)} with null as parameter or by
-     *          an underlying network problem which had (or just) caused this channel to close)
+     *          if this sender cannot carry the send task
      */
     void send(T payload) throws IOException;
 }

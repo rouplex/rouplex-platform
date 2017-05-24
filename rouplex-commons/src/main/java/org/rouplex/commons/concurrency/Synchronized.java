@@ -15,9 +15,13 @@ public class Synchronized {
      * forwarding all the calls to the original instance.
      *
      * @param source
+     *          the source map
      * @param <K>
+     *          the key type
      * @param <V>
+     *          the value type
      * @return
+     *          a SortedByValueMap with synchronized update access so that it is safe for use by concurrent threads
      */
     public static <K, V> SortedByValueMap<K, V> getSynchronized(final SortedByValueMap<K, V> source) {
         return new SortedByValueMap<K, V>() {
