@@ -12,6 +12,8 @@ import java.lang.reflect.Modifier;
 import java.util.*;
 
 /**
+ * Some useful, reflections related functionality.
+ *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class RouplexReflections {

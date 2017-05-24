@@ -10,7 +10,7 @@ import java.util.*;
 /**
  * A configuration structure aiming to enforce and limit configuration entries by use of enum keys,
  * while staying generic enough to be shared across unrelated components.
- * <p>
+ *
  * A configuration instance can only be obtained and updated via a {@link ConfigurationManager} instance.
  * The configuration instance offers hooks for listeners of configuration changes.
  *
@@ -35,13 +35,16 @@ public class Configuration {
     };
 
     /**
-     * Get the value associated to the key on this configuration (or on upstream/merged  instances)
-     * This configuration instance is searched first. If found, its entry value is returned,
-     * otherwise the upstream {@link Configuration}s are searched, the order is unspecified.
+     * Get the value associated to the key on this configuration (or on upstream/merged  instances). This configuration
+     * instance is searched first. If found, its entry value is returned, otherwise the upstream {@link Configuration}s
+     * are searched, the order is unspecified.
      *
-     * @param key the key to be searched for
-     * @return the value found
-     * @throws NoSuchElementException if no entry with that key is found
+     * @param key
+     *          the key to be searched for
+     * @return
+     *          the value found
+     * @throws
+     *          NoSuchElementException if no entry with that key is found
      */
     public String get(Enum key) {
         synchronized (keyValues) {
@@ -95,8 +98,10 @@ public class Configuration {
     /**
      * Add a new listener.
      *
-     * @param listener the new listener. If the listener has been added in the past, this becomes a noop.
-     * @return a {@link Closeable} instance which can be used to remove the listener at some later point.
+     * @param listener
+     *          the new listener. If the listener has been added in the past, this becomes a noop.
+     * @return
+     *          a {@link Closeable} instance which can be used to remove the listener at some later point.
      */
     public Closeable addListener(final ConfigurationUpdateListener listener) {
         listeners.add(listener);
@@ -113,6 +118,7 @@ public class Configuration {
      * Remove the listeners that this configuration has put in the upstream configurations to prevent memory leaks.
      *
      * @throws IOException
+     *          The first caught exception in case of a problem during closing
      */
     void close() throws IOException {
         IOException firstCaught = null;
@@ -141,8 +147,10 @@ public class Configuration {
      * This method is package protected to allow access from {@link ConfigurationManager} but it is not public so that
      * instances of the class can be referenced without mutability concerns.
      *
-     * @param key   the key for the entry to be added or replaced
-     * @param value the value of the entry
+     * @param key
+     *          the key for the entry to be added or replaced
+     * @param value
+     *          the value of the entry
      */
     void putConfigurationEntry(Enum key, String value) {
         String oldValue;
@@ -157,14 +165,15 @@ public class Configuration {
 
     /**
      * Remove a configuration entry.
-     * <p>
+     *
      * If upstream configurations contain the same entry, their value will become visible now. If more than one upstream
      * configuration contains the same entry, it is unspecified which one will win.
-     * <p>
+     *
      * This method is package protected to allow access from {@link ConfigurationManager} but it is not public so that
      * instances of the class can be referenced without mutability concerns.
      *
-     * @param key the key for the entry to be removed
+     * @param key
+     *          the key for the entry to be removed
      */
     void removeConfigurationEntry(Enum key) {
         synchronized (keyValues) {
@@ -176,12 +185,13 @@ public class Configuration {
 
     /**
      * Merge an upstream configuration.
-     * <p>
+     *
      * Entries of the upstream configuration will become visible via this configuration, unless this configuration
      * contains an entry with the same key. Events related to upstream updates will be forwarded to listeners
      * of this configuration.
      *
      * @param configuration
+     *          the configuration to merge in
      */
     void mergeConfiguration(Configuration configuration) {
         mergedConfigurations.put(configuration, configuration.addListener(configurationBroadcaster));

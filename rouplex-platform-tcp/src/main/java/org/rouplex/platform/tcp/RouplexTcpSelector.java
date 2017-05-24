@@ -11,6 +11,13 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 
 /**
+ * This class is for internal use, not to be accessed directly by the user. It performs tasks related to registering or
+ * unregistering channels with the selector that it owns, selecting on those channels and eventually firing related
+ * events to the throttledReceiver (when there is data available to read from network) and throttledSender (when there
+ * is buffer space available for write to network).
+ *
+ * Important to notice that all these tasks are handled by the same background thread off the executor's pool.
+ *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 class RouplexTcpSelector implements Closeable {
@@ -37,14 +44,17 @@ class RouplexTcpSelector implements Closeable {
         this.selector = selector;
         this.readBuffer = ByteBuffer.allocate(readBufferSize);
 
-        start(rouplexTcpBinder.executorService);
+        start(rouplexTcpBinder.getExecutorService());
     }
 
     /**
-     * Add the tcpEndPoint to be registered on next cycle of selector.
+     * Add the endpoint to be registered on next cycle of selector. We merely keep a reference on it, and wakeup the
+     * background thread which is tasked with selecting as well as registering new / unregistering old endpoints.
      *
      * @param tcpEndPoint
+     *          the endpoint to be added for selection inside the main loop
      * @throws IOException
+     *          if the instance has already been closed
      */
     void asyncRegisterTcpEndPoint(RouplexTcpEndPoint tcpEndPoint) throws IOException {
         synchronized (lock) {
@@ -57,6 +67,14 @@ class RouplexTcpSelector implements Closeable {
         }
     }
 
+    /**
+     * Perform the registration of the endpoint in the context of the background thread.
+     *
+     * @param tcpEndPoint
+     *          the endpoint to be registered
+     * @return
+     *          true if we should be keep accepting endpoints
+     */
     private boolean registerTcpEndPoint(RouplexTcpEndPoint tcpEndPoint) {
         boolean keepAccepting = true;
 
@@ -65,6 +83,7 @@ class RouplexTcpSelector implements Closeable {
             selectableChannel.configureBlocking(false);
 
             if (tcpEndPoint instanceof RouplexTcpClient) {
+                RouplexTcpClient tcpClient = (RouplexTcpClient) tcpEndPoint;
                 int interestOps = SelectionKey.OP_WRITE;
                 boolean connected = ((SocketChannel) selectableChannel).isConnected();
                 if (!connected) {
@@ -72,13 +91,13 @@ class RouplexTcpSelector implements Closeable {
                 }
 
                 // Important moment where the client gets to update itself knowing is registered with the binder
-                tcpEndPoint.setSelectionKey(selectableChannel.register(selector, interestOps, tcpEndPoint));
+                tcpClient.setSelectionKey(selectableChannel.register(selector, interestOps, tcpEndPoint));
 
                 if (connected) {
-                    keepAccepting = notifyConnectedTcpClient((RouplexTcpClient) tcpEndPoint);
+                    keepAccepting = notifyConnectedTcpClient(tcpClient);
                 }
             } else if (tcpEndPoint instanceof RouplexTcpServer) {
-                tcpEndPoint.setSelectionKey(selectableChannel.register(selector, SelectionKey.OP_ACCEPT, tcpEndPoint));
+                selectableChannel.register(selector, SelectionKey.OP_ACCEPT, tcpEndPoint);
                 notifyBoundTcpServer((RouplexTcpServer) tcpEndPoint);
             }
         } catch (Exception e) {
@@ -90,8 +109,13 @@ class RouplexTcpSelector implements Closeable {
     }
 
     /**
+     * Called from the background thread, handle tasks related to connection of a {@link RouplexTcpClient} and notify
+     * the eventual listener.
+     *
      * @param tcpClient
-     * @return true if we should keep accepting new channels, false otherwise (not implemented yet)
+     *          the newly created tcpClient
+     * @return
+     *          true if we should keep accepting new channels, false otherwise (not implemented yet)
      */
     private boolean notifyConnectedTcpClient(RouplexTcpClient tcpClient) {
         tcpClient.handleConnected();
@@ -104,6 +128,9 @@ class RouplexTcpSelector implements Closeable {
     }
 
     /**
+     * Called from the background thread, handle tasks related to binding of a {@link RouplexTcpServer} and notify
+     * the eventual listener.
+     *
      * @param tcpServer
      *          The {@link RouplexTcpServer} instance that got bound
      */
@@ -120,17 +147,27 @@ class RouplexTcpSelector implements Closeable {
      * selector.
      *
      * @param tcpEndPoint
-     * @throws IOException
+     *          the endpoint that needs to be unregistered
+     * @param optionalReason
+     *          if there was an exception which resulted in the endpoint being closed, null otherwise
      */
-    void asyncUnregisterTcpEndPoint(RouplexTcpEndPoint tcpEndPoint, Exception reason) throws IOException {
+    void asyncUnregisterTcpEndPoint(RouplexTcpEndPoint tcpEndPoint, Exception optionalReason) {
         synchronized (lock) {
             if (!closed) {
-                unregisteringTcpEndPoints.put(tcpEndPoint, reason);
+                unregisteringTcpEndPoints.put(tcpEndPoint, optionalReason);
                 selector.wakeup();
             }
         }
     }
 
+    /**
+     * Perform the un-registration of the endpoint in the context of the background thread.
+     *
+     * @param tcpEndPoint
+     *          the endpoint to be registered
+     * @param optionalReason
+     *          if there was an exception which resulted in the endpoint being closed, null otherwise
+     */
     private void unregisterTcpEndPoint(RouplexTcpEndPoint tcpEndPoint, Exception optionalReason) {
         try {
             if (tcpEndPoint instanceof RouplexTcpClient) {
@@ -282,11 +319,11 @@ class RouplexTcpSelector implements Closeable {
                 SocketChannel socketChannel = ((ServerSocketChannel) selectionKey.channel()).accept();
                 RouplexTcpServer rouplexTcpServer = (RouplexTcpServer) selectionKey.attachment();
 
-                if (rouplexTcpServer.sendBufferSize != 0) {
-                    socketChannel.socket().setSendBufferSize(rouplexTcpServer.sendBufferSize);
+                if (rouplexTcpServer.builder.sendBufferSize != 0) {
+                    socketChannel.socket().setSendBufferSize(rouplexTcpServer.builder.sendBufferSize);
                 }
-                if (rouplexTcpServer.receiveBufferSize != 0) {
-                    socketChannel.socket().setReceiveBufferSize(rouplexTcpServer.receiveBufferSize);
+                if (rouplexTcpServer.builder.receiveBufferSize != 0) {
+                    socketChannel.socket().setReceiveBufferSize(rouplexTcpServer.builder.receiveBufferSize);
                 }
 
                 RouplexTcpSelector rouplexTcpSelector = rouplexTcpBinder.nextRouplexTcpSelector();
@@ -414,6 +451,14 @@ class RouplexTcpSelector implements Closeable {
         selector.wakeup();
     }
 
+    /**
+     * Pause the reads for the selection key until a later moment in time.
+     *
+     * @param selectionKey
+     *          the key for which we need the pause to happen
+     * @param resumeTimestamp
+     *          the timeStamp in epoch time, after which the reads will auto resume
+     */
     void asyncPauseRead(SelectionKey selectionKey, long resumeTimestamp) {
         synchronized (lock) {
             if (selectionKey != null && selectionKey.isValid()) {
@@ -423,6 +468,12 @@ class RouplexTcpSelector implements Closeable {
         }
     }
 
+    /**
+     * Resume the reads for the selection key.
+     *
+     * @param selectionKey
+     *          the key for which we need to resume reads
+     */
     void asyncResumeRead(SelectionKey selectionKey) {
         synchronized (lock) {
             if (selectionKey != null && selectionKey.isValid()) {
@@ -432,20 +483,34 @@ class RouplexTcpSelector implements Closeable {
         }
     }
 
-    void asyncResumeWrite(SelectionKey selectionKey) {
-        synchronized (lock) {
-            if (selectionKey != null && selectionKey.isValid()) {
-                resumingWrites.put(selectionKey, 0L);
-                selector.wakeup();
-            }
-        }
-    }
-
+    /**
+     * Pause the writes for the selection key until a later moment in time.
+     *
+     * @param selectionKey
+     *          the key for which we need the pause to happen
+     * @param resumeTimestamp
+     *          the timeStamp in epoch time, after which the writes will resume
+     */
     void asyncPauseAccept(SelectionKey selectionKey, long resumeTimestamp) {
         synchronized (lock) {
             if (selectionKey != null && selectionKey.isValid()) {
                 resumingAccepts.put(selectionKey, resumeTimestamp);
                 asyncRemoveInterestOps(selectionKey, SelectionKey.OP_ACCEPT);
+            }
+        }
+    }
+
+    /**
+     * Resume the writes for the selection key.
+     *
+     * @param selectionKey
+     *          the key for which we need to resume writes
+     */
+    void asyncResumeWrite(SelectionKey selectionKey) {
+        synchronized (lock) {
+            if (selectionKey != null && selectionKey.isValid()) {
+                resumingWrites.put(selectionKey, 0L);
+                selector.wakeup();
             }
         }
     }
@@ -472,8 +537,8 @@ class RouplexTcpSelector implements Closeable {
     }
 
     /**
-     * The component is already in closed state, with no way to pass any exceptions to its user. That's why we silence
-     * all exceptions here.
+     * Always called from the context of the background thread. The component is already in closed state, with no way
+     * to pass any exceptions to its user. That's why we silence all exceptions here.
      */
     private void syncClose() {
         for (SelectionKey selectionKey : selector.keys()) {

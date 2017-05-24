@@ -1,36 +1,36 @@
 package org.rouplex.platform.tcp;
 
 /**
- * A rouplexTcpClient lifecycle listener
+ * A rouplexTcpClient lifecycle listener.
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public interface RouplexTcpClientListener{
     /**
-     * A rouplexTcpClient was connected
+     * A rouplexTcpClient was connected.
      *
      * @param rouplexTcpClient
-     *          The rouplexTcpClient object
+     *          the rouplexTcpClient object
      */
     void onConnected(RouplexTcpClient rouplexTcpClient);
 
     /**
-     * A rouplexTcpClient failed connection
+     * A rouplexTcpClient failed connection.
      *
      * @param rouplexTcpClient
-     *          The rouplexTcpClient object
+     *          the rouplexTcpClient object
      * @param reason
-     *          The reason for which rouplexTcpClient failed connection
+     *          the reason for which rouplexTcpClient failed connection
      */
     void onConnectionFailed(RouplexTcpClient rouplexTcpClient, Exception reason);
 
     /**
-     * A rouplexTcpClient was disconnected
+     * A rouplexTcpClient was disconnected.
      *
      * @param rouplexTcpClient
-     *          The rouplexTcpClient object
+     *          the rouplexTcpClient object
      * @param optionalReason
-     *          The reason for which rouplexTcpClient disconnected, or null if this is the result of a user request
+     *          the reason for which rouplexTcpClient disconnected, or null if this is the result of a user request
      * @param drainedChannels
      *          true if the channels were properly drained (input has read EOS and output has written EOS)
      */

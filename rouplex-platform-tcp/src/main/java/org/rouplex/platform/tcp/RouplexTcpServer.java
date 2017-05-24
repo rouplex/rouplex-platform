@@ -5,12 +5,24 @@ import org.rouplex.nio.channels.SSLServerSocketChannel;
 
 import javax.net.ssl.SSLContext;
 import java.io.IOException;
+import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 
 /**
+ * A class representing a TCP server and which provides the mechanism to accept new connections from remote endpoints
+ * and create {@link RouplexTcpClient}s by wrapping them.
+ *
+ * Instances of this class are obtained via the inner builder, which in turn is instantiated via the
+ * {@link RouplexTcpServer#newBuilder()} static method.
+ *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class RouplexTcpServer extends RouplexTcpEndPoint {
+
+    /**
+     * A RouplexTcpServer builder. The builder can only build one client and once done, any future calls to alter the
+     * builder or try to rebuild will fail with {@link IllegalStateException}. The builder is not thread safe.
+     */
     public static class Builder extends RouplexTcpEndPoint.Builder<RouplexTcpServer, Builder> {
         protected int backlog;
         protected RouplexTcpServerListener rouplexTcpServerListener;
@@ -21,6 +33,15 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
             }
         }
 
+        /**
+         * An optional {@link ServerSocketChannel}. May be already bound, in which case the localAddress, and the
+         * eventual {@link SSLContext} are ignored.
+         *
+         * @param serverSocketChannel
+         *          a server socket channel, bound or not
+         * @return
+         *          the reference to this builder for chaining calls
+         */
         public Builder withServerSocketChannel(ServerSocketChannel serverSocketChannel) {
             checkNotBuilt();
 
@@ -28,6 +49,15 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
             return builder;
         }
 
+        /**
+         * The classic server backlog, indicating the maximum number of connections that should be allowed to be ready
+         * for accept.
+         *
+         * @param backlog
+         *          the max number of pending connections
+         * @return
+         *          the reference to this builder for chaining calls
+         */
         public Builder withBacklog(int backlog) {
             checkNotBuilt();
 
@@ -35,18 +65,39 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
             return builder;
         }
 
-        public Builder withSecure(boolean secure, @Nullable SSLContext sslContext) throws IOException {
+        /**
+         * Weather the server should accept only secure clients or not. If secure, the sslContext provides the means to
+         * access the key and trust stores; if sslContext is null then the default {@link SSLContext}, containing JRE's
+         * defaults, and obtainable internally via {@link SSLContext#getDefault()} will be used. If not secure, the
+         * {@link SSLContext#getDefault()} should be null and will be ignored.
+         *
+         * @param secure
+         *          true if the server should accept only secured connections from remote endpoints
+         * @param sslContext
+         *          the sslContext to use, or null if system's defaults should be used
+         * @return
+         *          the reference to this builder for chaining calls
+         */
+        public Builder withSecure(boolean secure, @Nullable SSLContext sslContext) {
             checkNotBuilt();
 
             try {
                 this.sslContext = secure ? sslContext != null ? sslContext : SSLContext.getDefault() : null;
             } catch (Exception e) {
-                throw new IOException("Could not create SSLContext.", e);
+                throw new RuntimeException("Could not create SSLContext.", e);
             }
 
             return builder;
         }
 
+        /**
+         * Set the server lifecycle event listener, providing events related to binding or unbinding a server.
+         *
+         * @param rouplexTcpServerListener
+         *          the event listener
+         * @return
+         *          the reference to this builder for chaining calls
+         */
         public Builder withRouplexTcpServerListener(RouplexTcpServerListener rouplexTcpServerListener) {
             checkNotBuilt();
 
@@ -54,6 +105,14 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
             return builder;
         }
 
+        /**
+         * Build the server and bind it to the local address before returning.
+         *
+         * @return
+         *          the built and bound server
+         * @throws IOException
+         *          if any problems arise during the server creation and binding
+         */
         @Override
         public RouplexTcpServer buildAsync() throws IOException {
             checkNotBuilt();
@@ -66,27 +125,37 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
 
             RouplexTcpServer result = new RouplexTcpServer(this);
             builder = null;
-            return result.start();
+            return result.bind();
         }
     }
 
+    /**
+     * Create a new builder to be used to build a RouplexTcpServer.
+     *
+     * @return
+     *          the new builder
+     */
     public static Builder newBuilder() {
         return new Builder();
     }
 
-    protected final int sendBufferSize;
-    protected final int receiveBufferSize;
     protected final RouplexTcpServerListener rouplexTcpServerListener;
 
     RouplexTcpServer(Builder builder) {
         super(builder);
 
-        this.sendBufferSize = builder.sendBufferSize;
-        this.receiveBufferSize = builder.receiveBufferSize;
         this.rouplexTcpServerListener = builder.rouplexTcpServerListener;
     }
 
-    private RouplexTcpServer start() throws IOException {
+    /**
+     * Configure and bind the internal {@link ServerSocketChannel}.
+     *
+     * @return
+     *          the bound server
+     * @throws IOException
+     *          if any problem arose trying to bind the server
+     */
+    private RouplexTcpServer bind() throws IOException {
         ServerSocketChannel serverSocketChannel = (ServerSocketChannel) selectableChannel;
 
         if (builder.receiveBufferSize != 0) {
@@ -104,14 +173,22 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
         return this;
     }
 
+    /**
+     * Called from {@link RouplexTcpSelector} in the context of a background thread, when the server channel is
+     * registered with the internal {@link Selector}, to update the server's state and fire the onBound notification.
+     */
     void handleBound() {
-        updateOpen(null);
+        handleOpen(null);
 
         if (rouplexTcpServerListener != null) {
             rouplexTcpServerListener.onBound(this);
         }
     }
 
+    /**
+     * Called from {@link RouplexTcpSelector} in the context of a background thread, when the server channel is
+     * unregistered with the internal {@link Selector}, to fire the onUnBound notification.
+     */
     void handleUnBound() {
         if (rouplexTcpServerListener != null) {
             rouplexTcpServerListener.onUnBound(this);

@@ -5,10 +5,11 @@ import org.rouplex.platform.jaxrs.security.RouplexSecurityContext;
 
 import javax.inject.Inject;
 import javax.ws.rs.container.ContainerRequestContext;
+import javax.ws.rs.core.Context;
 import javax.ws.rs.core.SecurityContext;
 
 /**
- * Factory class to make the RouplexSecurityContext injectable using {@link @Inject} or {@link @Context}
+ * Factory class to make the RouplexSecurityContext injectable using {@link Inject} or {@link Context}
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */

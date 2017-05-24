@@ -30,7 +30,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * This is the base class to be extended by the Rouplex applications
+ * This is the base class to be extended by the Rouplex applications.
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */

@@ -13,8 +13,8 @@ import java.io.IOException;
 import java.security.cert.X509Certificate;
 
 /**
- * Filter which will locate the security context in {@link ContainerRequestContext} and
- * will build a {@link RouplexSecurityContext} from it.
+ * Filter which will locate the security context in {@link ContainerRequestContext} and will build a
+ * {@link RouplexSecurityContext} from it.
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */

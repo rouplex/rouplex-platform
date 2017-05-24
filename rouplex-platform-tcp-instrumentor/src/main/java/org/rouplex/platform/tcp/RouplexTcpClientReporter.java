@@ -46,18 +46,13 @@ public class RouplexTcpClientReporter {
         actor = rouplexTcpClient.getRouplexTcpServer() == null ? "RouplexTcpClient" : "RouplexTcpServer";
 
         try {
-            InetSocketAddress inetSocketAddress = (InetSocketAddress) rouplexTcpClient.getLocalAddress(false);
-            if (inetSocketAddress != null) {
-                localAddress = inetSocketAddress.getHostName();
-                localPort = inetSocketAddress.getPort() + "";
-            }
+            InetSocketAddress inetSocketAddress = (InetSocketAddress) rouplexTcpClient.getLocalAddress();
+            localAddress = inetSocketAddress.getHostName();
+            localPort = inetSocketAddress.getPort() + "";
 
-            inetSocketAddress = (InetSocketAddress) rouplexTcpClient.getRemoteAddress(false);
-            if (inetSocketAddress != null) {
-                remoteAddress = inetSocketAddress.getHostName();
-                remotePort = inetSocketAddress.getPort() + "";
-            }
-
+            inetSocketAddress = (InetSocketAddress) rouplexTcpClient.getRemoteAddress();
+            remoteAddress = inetSocketAddress.getHostName();
+            remotePort = inetSocketAddress.getPort() + "";
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
