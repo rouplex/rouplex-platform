@@ -5,6 +5,8 @@ import java.security.Principal;
 import java.security.cert.X509Certificate;
 
 /**
+ * Work in progress -- Do not use!
+ *
  * A generic {@link SecurityContext} implementation adding some more flavor to it.
  *
  * For the moment it can be instantiated with a {@link X509Certificate} which maps to a CLIENT_CERT auth_scheme but other

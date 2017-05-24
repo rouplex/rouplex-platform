@@ -17,7 +17,7 @@ import java.security.KeyStore;
 import java.util.*;
 
 /**
- * @author Andi Mullaraj (andimullaraj at gmail.com)
+ * Work in progress -- Do not use!
  */
 public class RouplexClientBuilder<T> extends ClientBuilder {
 

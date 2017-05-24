@@ -1,5 +1,8 @@
 package org.rouplex.jaxrs.client;
 
+/**
+ * Work in progress -- Do not use!
+ */
 public class Principal {
     private String name;
 

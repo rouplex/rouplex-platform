@@ -3,7 +3,7 @@ package org.rouplex.jaxrs.client;
 import java.security.cert.X509Certificate;
 
 /**
- * @author Andi Mullaraj (andimullaraj at gmail.com)
+ * Work in progress -- Do not use!
  */
 public class SecurityContext {
     private X509Certificate userX509Certificate;
