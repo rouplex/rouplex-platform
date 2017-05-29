@@ -7,8 +7,8 @@ import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 
 import java.lang.reflect.Field;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 
 @Aspect
@@ -24,9 +24,9 @@ public class AopInstrumentor {
 
     public final AopConfig aopConfig = AopConfig.allAggregated();
     public final MetricRegistry metricRegistry = new MetricRegistry();
-    public final Map<RouplexTcpBinder, RouplexTcpBinderReporter> tcpBinders
+    public final ConcurrentMap<RouplexTcpBinder, RouplexTcpBinderReporter> tcpBinders
             = new ConcurrentHashMap<RouplexTcpBinder, RouplexTcpBinderReporter>();
-    public final Map<RouplexTcpClient, RouplexTcpClientReporter> tcpClients
+    public final ConcurrentMap<RouplexTcpClient, RouplexTcpClientReporter> tcpClients
             = new ConcurrentHashMap<RouplexTcpClient, RouplexTcpClientReporter>();
 
     RouplexTcpBinderReporter getRouplexTcpBinderReporter(ProceedingJoinPoint pjp) {

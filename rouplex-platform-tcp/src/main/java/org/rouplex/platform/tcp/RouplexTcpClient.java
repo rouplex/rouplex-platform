@@ -524,7 +524,8 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
                 throw new IOException("Already closed");
             }
 
-            return ((SocketChannel) selectableChannel).getRemoteAddress();
+            // jdk1.7+ return ((SocketChannel) selectableChannel).getRemoteAddress();
+            return ((SocketChannel) selectableChannel).socket().getRemoteSocketAddress();
         }
     }
 

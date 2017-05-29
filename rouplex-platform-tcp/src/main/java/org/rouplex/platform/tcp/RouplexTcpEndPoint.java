@@ -193,7 +193,16 @@ class RouplexTcpEndPoint implements Closeable {
                 throw new IOException("Already closed");
             }
 
-            return ((NetworkChannel) selectableChannel).getLocalAddress();
+            // jdk1.7+ return ((NetworkChannel) selectableChannel).getLocalAddress();
+            if (selectableChannel instanceof SocketChannel) {
+                return ((SocketChannel) selectableChannel).socket().getLocalSocketAddress();
+            }
+            if (selectableChannel instanceof ServerSocketChannel) {
+                return ((ServerSocketChannel) selectableChannel).socket().getLocalSocketAddress();
+            }
+
+            throw new Error(String.format(
+                    "Internal implementation error: Class %s is not a NetworkChannel",  selectableChannel.getClass()));
         }
     }
 
