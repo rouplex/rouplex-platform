@@ -166,7 +166,8 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
 
         serverSocketChannel.configureBlocking(false);
         if (!serverSocketChannel.socket().isBound()) {
-            serverSocketChannel.bind(builder.localAddress, ((Builder) builder).backlog);
+            // jdk1.7+ serverSocketChannel.bind(builder.localAddress, ((Builder) builder).backlog);
+            serverSocketChannel.socket().bind(builder.localAddress, ((Builder) builder).backlog);
         }
 
         rouplexTcpSelector.asyncRegisterTcpEndPoint(this);

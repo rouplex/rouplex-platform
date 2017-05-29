@@ -27,6 +27,11 @@ public class RouplexCollections {
         public Object next() {
             return null;
         }
+
+        @Override
+        public void remove() {
+            throw new UnsupportedOperationException("remove");
+        }
     };
 
     public static <T> Iterator<T> getEmptyIterator() {
@@ -46,6 +51,11 @@ public class RouplexCollections {
             public E next() {
                 hasNext = false;
                 return element;
+            }
+
+            @Override
+            public void remove() {
+                throw new UnsupportedOperationException("remove");
             }
         };
     }

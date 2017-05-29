@@ -396,7 +396,8 @@ class RouplexTcpSelector implements Closeable {
                     boolean eos = !writeBuffer.hasRemaining(); // empty buffer is "marker for EOS"
                     try {
                         if (eos) {
-                            socketChannel.shutdownOutput();
+                            // jdk1.7+ socketChannel.shutdownOutput();
+                            socketChannel.socket().shutdownOutput();
                         } else {
                             socketChannel.write(writeBuffer);
                             if (writeBuffer.hasRemaining()) {
