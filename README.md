@@ -52,22 +52,57 @@ be created and deployed alongside your app in the WAR file for a very nice visua
 
 # Versioning #
 We use semantic versioning, in its representation x.y.z, x stands for API update, y for dependencies update, and z for
-build number.
+build number. Further, the main distribution is built using the latest Jdk (Jdk-1.8 as of May 2017) and then there are
+builds for Jdk-1.6, Jdk-1.7, Jdk-1.8 (and so on as we go with new Jdks) addressable through the classifier coordinate
+of the pom.
 
 # Build #
 
 1. Maven is required to build the project. Please download and install it. Make sure the installation is successful by
 typing `mvn -version` in a shell window; the command output should be showing the installation folder.
 
-1. Java is required to build the project.. Make sure the installation is successful by typing `java -version`; the
-command output should show the version.
+1. This is a multi jdk project providing optional builds for Jdk1.6+. You need to download the desired Jdks and make
+sure they are properly installed by typing `java -version`; the command output should show the version (1.6, 1.7, 1.8
+or 1.9).
 
-1. On a shell window, and from the folder containing this README.txt file, type `mvn clean install` and if
-successful, you will have the built artifacts in appropriate 'target' folders located under the appropriate modules.
-The same jars will be installed in your local maven repo.
+1. We use maven toolchain to provide the installation folders for the used jdks. Edit or create the ~/.m2/toolchain.xml
+file to contain the following (replace the jdk installation folders with your own):
+
+        <toolchains>
+            <toolchain>
+                <type>jdk</type>
+                <provides>
+                    <version>1.6</version>
+                    <vendor>sun</vendor>
+                </provides>
+                <configuration>
+                    <jdkHome>/Library/Java/JavaVirtualMachines/1.6.0_65-b14-462.jdk/Contents/Home</jdkHome>
+                </configuration>
+            </toolchain>
+            ...
+            <toolchain>
+                <type>jdk</type>
+                <provides>
+                    <version>1.8</version>
+                    <vendor>sun</vendor>
+                </provides>
+                <configuration>
+                    <jdkHome>/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home</jdkHome>
+                </configuration>
+            </toolchain>
+            ...
+        </toolchains>
+
+1. On a shell window, and from the folder containing this README file, type `mvn clean install` and if successful, the
+built artifacts will be in the target folders inside each module. If you are interested in building for only one of the
+JDKs, invoke the appropriate profile e.g. type `mvn clean install -Pjdk7`
 
 # Test #
 `mvn test`
+
+# Run #
+As we mentioned, this is a library and can be linked and be used by other libraries or applications. Hence this is not
+runnable on its own.
 
 # Contribution guidelines #
 
