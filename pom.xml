@@ -204,7 +204,7 @@
             <id>jdk6</id>
             <properties>
                 <jdk>1.6</jdk>
-                <classifier>jdk-${jdk}</classifier>
+                <classifier>jdk16</classifier>
             </properties>
         </profile>
 
@@ -212,7 +212,7 @@
             <id>jdk7</id>
             <properties>
                 <jdk>1.7</jdk>
-                <classifier>jdk-${jdk}</classifier>
+                <classifier>jdk17</classifier>
             </properties>
         </profile>
 
@@ -220,7 +220,7 @@
             <id>jdk8</id>
             <properties>
                 <jdk>1.8</jdk>
-                <classifier>jdk-${jdk}</classifier>
+                <classifier>jdk18</classifier>
             </properties>
         </profile>
 
@@ -274,7 +274,7 @@
                     <plugin>
                         <groupId>org.sonatype.plugins</groupId>
                         <artifactId>nexus-staging-maven-plugin</artifactId>
-                        <version>1.6.7</version>
+                        <version>1.6.8</version>
                         <extensions>true</extensions>
                         <configuration>
                             <serverId>ossrh</serverId>
