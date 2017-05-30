@@ -276,6 +276,9 @@ class RouplexTcpEndPoint implements Closeable {
      * @param optionalException
      *          if null, then the endpoint is set to "open" state and ready for communication. Otherwise, its value
      *          will be noted and will be thrown if another thread calls {@link #waitForOpen(long)}.
+     *
+     * @throws IOException
+     *          In case of exception handling the close
      */
     protected void handleClose(@Nullable Exception optionalException) throws IOException {
         synchronized (lock) {

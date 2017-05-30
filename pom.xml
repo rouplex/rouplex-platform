@@ -43,20 +43,14 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <maven.compiler.source>1.6</maven.compiler.source>
-        <maven.compiler.target>1.6</maven.compiler.target>
+        <!--Default Jdk as of May 2017-->
+        <jdk>1.8</jdk>
+        <classifier></classifier>
 
-        <!--<jdk.source>1.8</jdk.source>-->
-        <!--<compiler.version>1.8</compiler.version>-->
-        <!--<jdk.target>1.6</jdk.target>-->
-        <!--<java.executable>${JAVA_1_6_HOME}/bin/java</java.executable>-->
-        <!--<javac.executable>${JAVA_1_6_HOME}/bin/javac</javac.executable>-->
+        <maven.compiler.target>${jdk}</maven.compiler.target>
+        <maven.compiler.source>${jdk}</maven.compiler.source>
 
-        <!--Weird coincidence or by design, the last digit in the version seems to indicate the lowest jdk supported-->
         <aspectj.version>1.8.6</aspectj.version>
-        <!--<aspectj.bootclasspath>/Library/Java/JavaVirtualMachines/1.6.0_65-b14-462.jdk/Contents/Classes/classes.jar:/Library/Java/JavaVirtualMachines/1.6.0_65-b14-462.jdk/Contents/Classes/jsse.jar</aspectj.bootclasspath>-->
-        <!--<aspectj.bootclasspath>${JAVA_1_8_HOME}/jre/lib/rt.jar:${JAVA_1_8_HOME}/jre/lib/jsse.jar</aspectj.bootclasspath>-->
-
     </properties>
 
     <scm>
@@ -140,7 +134,37 @@
     </dependencyManagement>
 
     <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.aspectj</groupId>
+                    <artifactId>aspectjtools</artifactId>
+                    <version>${aspectj.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-toolchains-plugin</artifactId>
+                <version>1.1</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>toolchain</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <toolchains>
+                        <jdk>
+                            <version>[${maven.compiler.target},)</version>
+                        </jdk>
+                    </toolchains>
+                </configuration>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
@@ -167,7 +191,7 @@
                             <goal>jar</goal>
                         </goals>
                         <configuration>
-                            <classifier>jdk-${maven.compiler.target}</classifier>
+                            <classifier>${classifier}</classifier>
                         </configuration>
                     </execution>
                 </executions>
@@ -176,6 +200,30 @@
     </build>
 
     <profiles>
+        <profile>
+            <id>jdk6</id>
+            <properties>
+                <jdk>1.6</jdk>
+                <classifier>jdk-${jdk}</classifier>
+            </properties>
+        </profile>
+
+        <profile>
+            <id>jdk7</id>
+            <properties>
+                <jdk>1.7</jdk>
+                <classifier>jdk-${jdk}</classifier>
+            </properties>
+        </profile>
+
+        <profile>
+            <id>jdk8</id>
+            <properties>
+                <jdk>1.8</jdk>
+                <classifier>jdk-${jdk}</classifier>
+            </properties>
+        </profile>
+
         <profile>
             <id>release</id>
             <build>
