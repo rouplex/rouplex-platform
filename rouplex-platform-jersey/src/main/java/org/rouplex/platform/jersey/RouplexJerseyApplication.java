@@ -13,6 +13,7 @@ import org.rouplex.commons.Optional;
 import org.rouplex.commons.Predicate;
 import org.rouplex.commons.reflections.RouplexReflections;
 import org.rouplex.platform.RouplexBinder;
+import org.rouplex.platform.RouplexPlatform;
 import org.rouplex.platform.RouplexService;
 import org.rouplex.platform.jaxrs.filter.RouplexSecurityContextFilter;
 import org.rouplex.platform.jaxrs.security.RouplexSecurityContext;
@@ -35,8 +36,8 @@ import java.util.Set;
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class RouplexJerseyApplication extends ResourceConfig implements RouplexBinder {
-    class SwaggerBeanConfig extends BeanConfig {
-        private final Set<Class<?>> swaggerEnabledResources = new HashSet();
+    protected class SwaggerBeanConfig extends BeanConfig {
+        private final Set<Class<?>> swaggerEnabledResources = new HashSet<Class<?>>();
 
         SwaggerBeanConfig() {
             setVersion("1.0");
@@ -75,7 +76,26 @@ public class RouplexJerseyApplication extends ResourceConfig implements RouplexB
         }
     }
 
+    protected static class ExceptionEntity {
+        String exceptionClass;
+        String exceptionMessage;
+
+        public ExceptionEntity(Exception exception) {
+            this.exceptionClass = exception.getClass().toString();
+            this.exceptionMessage = exception.getMessage();
+        }
+
+        public String getExceptionClass() {
+            return exceptionClass;
+        }
+
+        public String getExceptionMessage() {
+            return exceptionMessage;
+        }
+    }
+
     private final ServletContext servletContext;
+    private final RouplexPlatform rouplexPlatform = new RouplexPlatform();
     private final SwaggerBeanConfig swaggerBeanConfig = new SwaggerBeanConfig();
 
     public RouplexJerseyApplication(@Context ServletContext servletContext) {
@@ -84,7 +104,8 @@ public class RouplexJerseyApplication extends ResourceConfig implements RouplexB
     }
 
     @PostConstruct
-    void init() {
+    protected void postConstruct() {
+// todo finish         initConfiguration();
         initSecurity();
         initJacksonJaxbJsonProvider();
         initExceptionMapper();
@@ -107,6 +128,15 @@ public class RouplexJerseyApplication extends ResourceConfig implements RouplexB
         register(provider);
     }
 
+// todo finish protected void initConfiguration() {
+//        register(new AbstractBinder() {
+//            @Override
+//            protected void configure() {
+//                bindFactory(RouplexSecurityContextFactory.class).to(RouplexSecurityContext.class).in(RequestScoped.class);
+//            }
+//        });
+//    }
+
     protected void initSecurity() {
         register(new RouplexSecurityContextFilter());
         register(new AbstractBinder() {
@@ -122,28 +152,10 @@ public class RouplexJerseyApplication extends ResourceConfig implements RouplexB
     }
 
     protected void initExceptionMapper() {
-        class E {
-            String exceptionClass;
-            String exceptionMessage;
-
-            E(Exception exception) {
-                this.exceptionClass = exception.getClass().toString();
-                this.exceptionMessage = exception.getMessage();
-            }
-
-            public String getExceptionClass() {
-                return exceptionClass;
-            }
-
-            public String getExceptionMessage() {
-                return exceptionMessage;
-            }
-        }
-
         register(new ExceptionMapper<Exception>() {
             @Override
             public Response toResponse(Exception e) {
-                return Response.status(500).entity(new E(e)).build();
+                return Response.status(500).entity(new ExceptionEntity(e)).build();
             }
         });
     }
@@ -152,7 +164,7 @@ public class RouplexJerseyApplication extends ResourceConfig implements RouplexB
         return swaggerBeanConfig;
     }
 
-    public void bindRouplexResource(Class<?> clazz, boolean enableSwagger) {
+    public void bindRouplexResource(final Class<?> clazz, boolean enableSwagger) {
         register(clazz);
 
         if (enableSwagger) {
@@ -162,6 +174,11 @@ public class RouplexJerseyApplication extends ResourceConfig implements RouplexB
         // fish out coordinates of the resource being bound, create a RouplexService instance, and register it with the
         // platform
         bindServiceProvider(new RouplexService() {
+// todo finish
+//            @Override
+//            public String getServiceId() {
+//                return clazz.getName();
+//            }
         });
     }
 
@@ -170,6 +187,12 @@ public class RouplexJerseyApplication extends ResourceConfig implements RouplexB
 //        register(object);
 //        ...
 //  }
+
+// todo finish
+//    @Override
+//    public RouplexPlatform getPlatform() {
+//        return rouplexPlatform;
+//    }
 
     @Override
     public void bindServiceProvider(RouplexService serviceProvider) {
