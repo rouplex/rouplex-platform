@@ -6,7 +6,7 @@
 
     <groupId>org.rouplex</groupId>
     <artifactId>rouplex-platform-parent</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
     <packaging>pom</packaging>
 
     <name>Rouplex Platform</name>
@@ -19,13 +19,13 @@
         application/json via JAX-RS as serialization protocols. It offers plain or SSL/TLS communication for security
         of your data in transit. For now it is only available in Java, with bindings for other languages coming soon.
         The communication pattern is request-reply, with fail fast semantics, and with service consumers (clients)
-        knowing beforehand the coordinates of the service providers (servers). Blocking API is available with all
-        communication protocols and unblocking/asynchronous flavors are available with TCP communication protocol.
+        knowing beforehand the coordinates of the service providers (servers). The TCP communication protocol offers
+        blocking/unblocking/asynchronous flavors whereas the rest are only blocking for now.
 
-        The platform can also be used as a service, in which case a Discovery Service facilitates registration of the
-        service providers (servers) and service consumers (clients). In this case, the callers don't need to resolve or
-        even balance their calls towards various endpoints, since the Platform handles this tasks. In this case, the
-        pub/sub communication pattern will also be available (coming soon) with at-most-once delivery guarantees.
+        Coming soon, the platform will provide a Discovery Service to facilitate the registration of the service
+        providers (servers) and service consumers (clients). In this case, the callers don't need to resolve or even
+        balance their calls towards various endpoints, since the Platform handles this tasks. In this case, the pub/sub
+        communication pattern will also be available (coming soon) with at-most-once delivery guarantees.
 
         We intend to provide a Security Service for managing the keys/and certificates of various services as well as
         Metrics and Logging services (coming soon).
@@ -43,12 +43,9 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <!--Default Jdk as of May 2017-->
         <jdk>1.8</jdk>
-        <classifier></classifier>
-
+        <maven.compiler.source>1.6</maven.compiler.source>
         <maven.compiler.target>${jdk}</maven.compiler.target>
-        <maven.compiler.source>${jdk}</maven.compiler.source>
 
         <aspectj.version>1.8.6</aspectj.version>
     </properties>
@@ -80,43 +77,43 @@
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-commons</artifactId>
-                <version>1.0.1</version>
+                <version>1.0.2</version>
             </dependency>
 
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-platform</artifactId>
-                <version>1.0.1</version>
+                <version>1.0.2</version>
             </dependency>
 
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-platform-jaxrs</artifactId>
-                <version>1.0.1</version>
+                <version>1.0.2</version>
             </dependency>
 
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-platform-jaxrs-client</artifactId>
-                <version>1.0.1</version>
+                <version>1.0.2</version>
             </dependency>
 
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-platform-jersey</artifactId>
-                <version>1.0.1</version>
+                <version>1.0.2</version>
             </dependency>
 
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-platform-tcp</artifactId>
-                <version>1.0.1</version>
+                <version>1.0.2</version>
             </dependency>
 
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-platform-tcp-instrumentor</artifactId>
-                <version>1.0.1</version>
+                <version>1.0.2-SNAPSHOT</version>
             </dependency>
 
             <dependency>
@@ -167,6 +164,20 @@
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.0.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
                 <version>2.10</version>
                 <executions>
@@ -181,49 +192,10 @@
                     </execution>
                 </executions>
             </plugin>
-
-            <plugin>
-                <artifactId>maven-jar-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
-                        <configuration>
-                            <classifier>${classifier}</classifier>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
     </build>
 
     <profiles>
-        <profile>
-            <id>jdk6</id>
-            <properties>
-                <jdk>1.6</jdk>
-                <classifier>jdk16</classifier>
-            </properties>
-        </profile>
-
-        <profile>
-            <id>jdk7</id>
-            <properties>
-                <jdk>1.7</jdk>
-                <classifier>jdk17</classifier>
-            </properties>
-        </profile>
-
-        <profile>
-            <id>jdk8</id>
-            <properties>
-                <jdk>1.8</jdk>
-                <classifier>jdk18</classifier>
-            </properties>
-        </profile>
-
         <profile>
             <id>release</id>
             <build>

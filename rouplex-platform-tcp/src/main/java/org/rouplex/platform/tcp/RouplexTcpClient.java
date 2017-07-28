@@ -148,8 +148,7 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
             checkCanBuild();
 
             if (selectableChannel == null) {
-                selectableChannel = sslContext == null
-                        ? SocketChannel.open() : SSLSocketChannel.open(sslContext);
+                selectableChannel = sslContext == null ? SocketChannel.open() : SSLSocketChannel.open(sslContext);
             }
 
             RouplexTcpClient result = new RouplexTcpClient(this);
