@@ -6,7 +6,7 @@
 
     <groupId>org.rouplex</groupId>
     <artifactId>rouplex-platform-parent</artifactId>
-    <version>1.0.2-SNAPSHOT</version>
+    <version>1.0.2</version>
     <packaging>pom</packaging>
 
     <name>Rouplex Platform</name>
@@ -77,37 +77,37 @@
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-commons</artifactId>
-                <version>1.0.2-SNAPSHOT</version>
+                <version>1.0.2</version>
             </dependency>
 
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-platform</artifactId>
-                <version>1.0.2-SNAPSHOT</version>
+                <version>1.0.2</version>
             </dependency>
 
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-platform-jaxrs</artifactId>
-                <version>1.0.2-SNAPSHOT</version>
+                <version>1.0.2</version>
             </dependency>
 
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-platform-jaxrs-client</artifactId>
-                <version>1.0.2-SNAPSHOT</version>
+                <version>1.0.2</version>
             </dependency>
 
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-platform-jersey</artifactId>
-                <version>1.0.2-SNAPSHOT</version>
+                <version>1.0.2</version>
             </dependency>
 
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-platform-tcp</artifactId>
-                <version>1.0.2-SNAPSHOT</version>
+                <version>1.0.2</version>
             </dependency>
 
             <dependency>
