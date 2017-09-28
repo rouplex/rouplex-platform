@@ -5,7 +5,7 @@ package org.rouplex.platform.tcp;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public interface RouplexTcpClientListener{
+public interface RouplexTcpClientListener {
     /**
      * A rouplexTcpClient was connected.
      *

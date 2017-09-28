@@ -7,11 +7,11 @@
     <parent>
         <groupId>org.rouplex</groupId>
         <artifactId>rouplex-platform-parent</artifactId>
-        <version>1.0.2-SNAPSHOT</version>
+        <version>1.0.3-SNAPSHOT</version>
     </parent>
 
     <artifactId>rouplex-platform-tcp-instrumentor</artifactId>
-    <version>1.0.2-SNAPSHOT</version>
+    <version>1.0.3-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <build>
@@ -56,7 +56,14 @@
                 <dependencies>
                     <dependency>
                         <groupId>org.aspectj</groupId>
+                        <artifactId>aspectjrt</artifactId>
+                        <version>${aspectj.version}</version>
+                    </dependency>
+
+                    <dependency>
+                        <groupId>org.aspectj</groupId>
                         <artifactId>aspectjtools</artifactId>
+                        <version>${aspectj.version}</version>
                     </dependency>
                 </dependencies>
             </plugin>

@@ -13,20 +13,20 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * This class serves as a binder between TCP endpoints, such as {@link RouplexTcpClient}s or {@link RouplexTcpServer}s,
- * and the rouplex platform. Internally, it manages the communication channels by registering them to channel selectors
- * and using the executors threads to select upon them.
+ * This class serves as a binder between the platform and {@link RouplexTcpSelector}s and {@link RouplexTcpClient}s
+ * or {@link RouplexTcpServer}s. Internally, it spawns a number of RouplexTcpSelector instances, which will be handling
+ * events related to all registered clients and servers.
  *
  * There are two creation patterns for instances of this class:
  *
- * 1. Created by {@link RouplexTcpClient.Builder} or {@link RouplexTcpServer.Builder} when there is no RouplexTcpBinder
- * assigned to it, in which case a RouplexTcpBinder will be created automatically and used by the endpoint created. In
- * that case, the RouplexTcpBinder will be closed by that endpoint when the endpoint is closed in its turn.
- *
- * 2. Created via a constructor and passed to one or more {@link RouplexTcpClient}s or {{@link RouplexTcpServer}s via
+ * (1) Created via its constructor and passed to one or more {@link RouplexTcpClient}s or {@link RouplexTcpServer}s via
  * {@link RouplexTcpClient.Builder#withRouplexTcpBinder(RouplexTcpBinder)} or
  * {@link RouplexTcpServer.Builder#withRouplexTcpBinder(RouplexTcpBinder)}. In this case, the various clients and/or
  * servers created will not close this instance when they are closed.
+ *
+ * (2) Created by {@link RouplexTcpClient.Builder} or {@link RouplexTcpServer.Builder} when there is no RouplexTcpBinder
+ * assigned to it, in which case a RouplexTcpBinder will be created automatically and used by the endpoint created. In
+ * that case, the RouplexTcpBinder will be closed by that endpoint when the endpoint is closed in its turn.
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
@@ -42,7 +42,7 @@ public class RouplexTcpBinder implements Closeable {
         }
     };
 
-    private static final ThreadFactory DEFAULT_THREAD_FATORY = new ThreadFactory() {
+    private final static ThreadFactory DEFAULT_THREAD_FACTORY = new ThreadFactory() {
         @Override
         public Thread newThread(Runnable runnable) {
             Thread thread = new Thread(runnable);
@@ -113,14 +113,14 @@ public class RouplexTcpBinder implements Closeable {
         tcpSelectors = new RouplexTcpSelector[Runtime.getRuntime().availableProcessors()];
 
         this.executorService = (sharedExecutorService = executorService != null)
-                ? executorService : Executors.newFixedThreadPool(tcpSelectors.length, DEFAULT_THREAD_FATORY);
+                ? executorService : Executors.newFixedThreadPool(tcpSelectors.length, DEFAULT_THREAD_FACTORY);
 
         if (readBufferSize <= 0) {
             throw new IllegalArgumentException("Read buffer size must be positive");
         }
 
-        for (int counter = 0; counter < tcpSelectors.length; counter++) {
-            tcpSelectors[counter] = new RouplexTcpSelector(this, selectorSupplier.get(), readBufferSize);
+        for (int index = 0; index < tcpSelectors.length; index++) {
+            tcpSelectors[index] = new RouplexTcpSelector(this, selectorSupplier.get(), readBufferSize);
         }
     }
 
@@ -148,8 +148,8 @@ public class RouplexTcpBinder implements Closeable {
             closed = true;
         }
 
-        for (int counter = 0; counter < tcpSelectors.length; counter++) {
-            tcpSelectors[counter].close();
+        for (RouplexTcpSelector tcpSelector : tcpSelectors) {
+            tcpSelector.close();
         }
 
         if (!sharedExecutorService) {

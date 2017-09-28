@@ -11,12 +11,16 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 
 /**
- * This class is for internal use, not to be accessed directly by the user. It performs tasks related to registering or
- * unregistering channels with the selector that it owns, selecting on those channels and eventually firing related
- * events to the throttledReceiver (when there is data available to read from network) and throttledSender (when there
- * is buffer space available for write to network).
+ * Internal class, not to be accessed directly by the user. It performs tasks related to registering and unregistering
+ * channels with the selector that it owns, selecting on those channels and handling the ready ops by performing them,
+ * then invoking the appropriate handlers to perform the rest of the handling.
  *
- * Important to notice that all these tasks are handled by the same background thread off the executor's pool.
+ * For example, it will perform a {@link SocketChannel#finishConnect()} when it notices the channel is connectable,
+ * and if successful will call the related client's connected(..) event; or it will perform a
+ * {@link SocketChannel#read(ByteBuffer)} when it notices the channel is readable, then invoke the appropriate client's
+ * throttled receiver to handle the received data and so on with the write.
+ *
+ * The number of instances of this class will be usually related to the number of the CPU's available in the host.
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
@@ -313,7 +317,7 @@ class RouplexTcpSelector implements Closeable {
         });
     }
 
-    private void handleSelectedKey(SelectionKey selectionKey) {
+    void handleSelectedKey(SelectionKey selectionKey) {
         try {
             if (selectionKey.isAcceptable()) {
                 SocketChannel socketChannel = ((ServerSocketChannel) selectionKey.channel()).accept();
@@ -529,7 +533,7 @@ class RouplexTcpSelector implements Closeable {
         selector.wakeup();
     }
 
-    private void logHandleSelectedKeyException(Exception e) {
+    void logHandleSelectedKeyException(Exception e) {
         // AOP wraps this call for debugging
     }
 
@@ -558,7 +562,7 @@ class RouplexTcpSelector implements Closeable {
 
         try {
             selector.close();
-        } catch (Exception e) {
+        } catch (IOException ioe) {
         }
     }
 }

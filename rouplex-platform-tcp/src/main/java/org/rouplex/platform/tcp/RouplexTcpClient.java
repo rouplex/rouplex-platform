@@ -24,20 +24,20 @@ import java.util.LinkedList;
 import java.util.concurrent.TimeUnit;
 
 /**
- * A class representing a TCP client and which provides access to the related output and input streams via
- * {@link Sender} and {@link Receiver} interfaces.
+ * A class representing a TCP client connected to a remote endpoint and optionally to a local one. It provides access
+ * to the related output and input streams via {@link Sender} and {@link Receiver} interfaces.
  *
- * Instances of this class are obtained via the inner builder, which in turn is instantiated via the
- * {@link RouplexTcpClient#newBuilder()} static method.
+ * Instances of this class are built via the builder obtainable in turn via the {@link RouplexTcpClient#newBuilder()}
+ * static method.
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class RouplexTcpClient extends RouplexTcpEndPoint {
     protected final static byte[] EOS_BA = new byte[0];
-    private static final ByteBuffer EOS_BB = ByteBuffer.allocate(0);
+    protected final static ByteBuffer EOS_BB = ByteBuffer.allocate(0);
 
     /**
-     * A RouplexTcpClient builder. The builder can only build one client and once done, any future calls to alter the
+     * A RouplexTcpClient builder. The builder can only build one client, and once done, any future calls to alter the
      * builder or try to rebuild will fail with {@link IllegalStateException}. The builder is not thread safe.
      */
     @NotThreadSafe
@@ -298,15 +298,21 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
         /**
          * Send a payload to the remote endpoint.
          *
-         * A payload with no remaining bytes is interpreted as an End-Of-Stream, in which case:
-         * 1. Any future sends will fail with "Sender closed" IOException
-         * 2. The sender will make sure all the write buffers are flushed, then shutdown the channel's output stream,
-         * resulting in End-Of-Stream being transmitted to the remote endpoint
-         * 3. Whenever the RouplexTcpClient receives an End-Of-Stream from the remote endpoint, it will close itself
-         * and will notify the listener of the graceful close by passing null in the exception parameter.
+         * The units of data to be sent via the Sender is a {@link ByteBuffer}. Upon the return from this call the
+         * ByteBuffer's position will have advanced to take into account the number of bytes sent.
          *
-         * A null payload will be interpreted as an abrupt Sender close, and it will close the sender and the
-         * RouplexTcpClient.
+         * In particular,
+         *
+         * (1) sending a ByteBuffer of 0 remaining bytes is interpreted as end-of-stream and will be handled by shutting
+         * down the underlying socketChannel's output stream (after the underlying buffers are completely flushed out).
+         * Consequently, the remote endpoint will receive an empty byte array, indicating the end-of-stream. If the remote
+         * endpoint has closed its output stream then the remote endpoint will be closed, then fire the appropriate
+         * disconnect event (with no exception, meaning graceful).
+         *
+         * (2) sending a null ByteBuffer indicates an abrupt close of the stream and will close this client and its
+         * underlying socket channel without trying to flush any remaining data first. The remote endpoint will produce a
+         * {@link Receiver#receive(Object)} with a null payload, and will close in its turn, firing the appropriate
+         * disconnect event with the related exception.
          *
          * @param payload
          *          the payload to be sent
@@ -540,22 +546,29 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
     }
 
     /**
-     * Hook (rather get) the sender to be used for sending bytes to the remote endpoint. The provided throttle will be
+     * Hook (rather get) the {@link Sender} to use for sending bytes via this client. The throttle parameter will be
      * used by this instance to notify when to resume after a pause.
      *
-     * A {@link ByteBuffer} of 0 remaining bytes is considered as End-Of-Stream and will be handled by shutting down
-     * the underlying socketChannel's output stream (after the underlying buffers are completely flushed out). As a
-     * result, the remote endpoint will receive an empty byte array, indicating the End-Of-Stream. When subsequently,
-     * an End-Of-Stream marker is received from the remote endpoint, then the RouplexTcpClient is closed gracefully,
-     * and the listener will be notified of the disconnected RouplexTcpClient with a null exception (graceful).
+     * The units of data to be sent via the Sender is a {@link ByteBuffer}. Upon the return from this call the
+     * ByteBuffer's position will have advanced to take into account the number of bytes sent.
      *
-     * Sending a null payload is considered as an abrupt disconnect and will close the underlying socket channel
-     * without bothering to flush any remaining data first. The remote endpoint will receive a null payload, in turn.
+     * In particular,
+     *
+     * (1) Sending a ByteBuffer of 0 remaining bytes is interpreted as end-of-stream and will be handled by shutting
+     * down the underlying socketChannel's output stream (after the underlying buffers are completely flushed out).
+     * Consequently, the remote endpoint will receive an empty byte array, indicating the end-of-stream. If the remote
+     * endpoint has closed its output stream then the remote endpoint will be closed, then fire the appropriate
+     * disconnect event (with no exception, meaning graceful).
+     *
+     * (2) Sending a null ByteBuffer indicates an abrupt close of the stream and will close this client and its
+     * underlying socket channel without trying to flush any remaining data first. The remote endpoint will produce a
+     * {@link Receiver#receive(Object)} with a null payload, and will close in its turn, firing the appropriate
+     * disconnect event with the related exception.
      *
      * @param throttle
      *          a throttle instance to be used to control the traffic flow (via calls to pause / resume)
      * @return
-     *          the sender to be used to send payloads.
+     *          the sender to be used to send ByteBuffer payloads.
      */
     public Sender<ByteBuffer> hookSendChannel(Throttle throttle) {
         synchronized (lock) {
@@ -569,15 +582,33 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
     }
 
     /**
-     * Hook (rather pass) the {@link Receiver} which will be receiving the read bytes from the remote endpoint.
-     * Normally, the receiver will be called with non-empty byte buffers. A zero length byte buffer must be interpreted
-     * as an End-Of-Stream. A null byte buffer must be interpreted as an abrupt disconnect and the RouplexTcpClient
-     * will be closed automatically, and the listener will be notified along wth the respective exception.
+     * Hook (or set) the {@link Receiver} which will be receiving the bytes read by this client. Whenever there are
+     * bytes available, they will be passed to the receiver by this client via a {@link Receiver#receive(Object)} call.
+     *
+     * See {@link Receiver} for general details about handling the payload received. In this particular case, the
+     * payload must be handled promptly (usually asynchronously by copying the reference of the byte buffer and
+     * assigning a worker thread to handle it).
+     *
+     * The receiver will be called with byte[] as parameter. In particular,
+     *
+     * (1) A {@link Receiver#receive(Object)} call with a byte array of size 0 (zero) must be interpreted as
+     * end-of-stream sent from the remote endpoint. If the client has already sent its end-of-stream via the
+     * {@link Sender}, the client will be subsequently shut down and the appropriate disconnect event with null as
+     * exception (meaning graceful) will be fired.
+     *
+     * (2) A call with a null byte array must be interpreted as a disrupted stream, either from the remote end
+     * explicitly, or due to communication problems. In the latest case this client will also close itself and fire the
+     * appropriate disconnect event with the related exception.
+     *
+     * This API may look a bit less descriptive then, say, having a proper close() event, but having one method call
+     * only, provides for serializability of the events leaving no room for interpretations as to which event happened
+     * first.
      *
      * @param receiver
      *          the receiver instance for receiving the payloads
      * @param started
-     *          true if the caller is prepared to receive payloads, false to postpone the firing of incoming payloads
+     *          true if the caller is prepared to receive payloads right away, false to postpone the firing of incoming
+     *          payloads until a {@link Throttle#resume()} call.
      * @return
      *          the throttle construct which the receiver can use to control the flow of receiving bytes
      */

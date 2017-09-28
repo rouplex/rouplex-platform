@@ -6,7 +6,7 @@
 
     <groupId>org.rouplex</groupId>
     <artifactId>rouplex-platform-parent</artifactId>
-    <version>1.0.2</version>
+    <version>1.0.3-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Rouplex Platform</name>
@@ -44,10 +44,10 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <jdk>1.8</jdk>
-        <maven.compiler.source>1.6</maven.compiler.source>
+        <maven.compiler.source>${jdk}</maven.compiler.source>
         <maven.compiler.target>${jdk}</maven.compiler.target>
 
-        <aspectj.version>1.8.6</aspectj.version>
+        <aspectj.version>1.8.9</aspectj.version>
     </properties>
 
     <scm>
@@ -77,43 +77,43 @@
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-commons</artifactId>
-                <version>1.0.2</version>
+                <version>1.0.3-SNAPSHOT</version>
             </dependency>
 
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-platform</artifactId>
-                <version>1.0.2</version>
+                <version>1.0.3-SNAPSHOT</version>
             </dependency>
 
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-platform-jaxrs</artifactId>
-                <version>1.0.2</version>
+                <version>1.0.3-SNAPSHOT</version>
             </dependency>
 
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-platform-jaxrs-client</artifactId>
-                <version>1.0.2</version>
+                <version>1.0.3-SNAPSHOT</version>
             </dependency>
 
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-platform-jersey</artifactId>
-                <version>1.0.2</version>
+                <version>1.0.3-SNAPSHOT</version>
             </dependency>
 
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-platform-tcp</artifactId>
-                <version>1.0.2</version>
+                <version>1.0.3-SNAPSHOT</version>
             </dependency>
 
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-platform-tcp-instrumentor</artifactId>
-                <version>1.0.2-SNAPSHOT</version>
+                <version>1.0.3-SNAPSHOT</version>
             </dependency>
 
             <dependency>
@@ -127,20 +127,16 @@
                 <artifactId>aspectjrt</artifactId>
                 <version>${aspectj.version}</version>
             </dependency>
+
+            <dependency>
+                <groupId>org.aspectj</groupId>
+                <artifactId>aspectjtools</artifactId>
+                <version>${aspectj.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
     <build>
-        <pluginManagement>
-            <plugins>
-                <plugin>
-                    <groupId>org.aspectj</groupId>
-                    <artifactId>aspectjtools</artifactId>
-                    <version>${aspectj.version}</version>
-                </plugin>
-            </plugins>
-        </pluginManagement>
-
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -266,6 +262,6 @@
         <module>rouplex-platform-jaxrs-client</module>
         <module>rouplex-platform-jersey</module>
         <module>rouplex-platform-tcp</module>
-        <!--<module>rouplex-platform-tcp-instrumentor</module>-->
+        <module>rouplex-platform-tcp-instrumentor</module>
     </modules>
 </project>
