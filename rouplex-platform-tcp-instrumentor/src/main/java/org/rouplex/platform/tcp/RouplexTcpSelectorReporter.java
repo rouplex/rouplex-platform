@@ -11,11 +11,11 @@ import java.util.logging.Logger;
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class RouplexTcpBinderReporter {
-    private static final Logger logger = Logger.getLogger(RouplexTcpBinderReporter.class.getSimpleName());
-    public static final String format = "RouplexTcpBinder.%s"; // [Hash]
+public class RouplexTcpSelectorReporter {
+    private static final Logger logger = Logger.getLogger(RouplexTcpSelectorReporter.class.getSimpleName());
+    public static final String format = "RouplexTcpSelector.%s"; // [Hash]
 
-    public final RouplexTcpBinder rouplexTcpBinder;
+    public final RouplexTcpSelector rouplexTcpSelector;
     public final AopInstrumentor aopInstrumentor;
 
     public Meter handleSelectedKey;
@@ -23,14 +23,14 @@ public class RouplexTcpBinderReporter {
     public String aggregatedId;
     public String completeId;
 
-    public RouplexTcpBinderReporter(RouplexTcpBinder rouplexTcpBinder, AopInstrumentor aopInstrumentor) {
-        this.rouplexTcpBinder = rouplexTcpBinder;
+    public RouplexTcpSelectorReporter(RouplexTcpSelector rouplexTcpSedlector, AopInstrumentor aopInstrumentor) {
+        this.rouplexTcpSelector = rouplexTcpSedlector;
         this.aopInstrumentor = aopInstrumentor;
 
         updateId();
     }
 
-    public Object handleSelectedKey(ProceedingJoinPoint pjp) throws Throwable {
+    public Object reportHandleSelectedKey(ProceedingJoinPoint pjp) throws Throwable {
         Object result = pjp.proceed();
 
         handleSelectedKey.mark();
@@ -39,11 +39,9 @@ public class RouplexTcpBinderReporter {
     }
 
     private void updateId() {
-        completeId = String.format(format, rouplexTcpBinder.hashCode());
-        AopConfig aopConfig = aopInstrumentor.aopConfig;
+        completeId = String.format(format, rouplexTcpSelector.hashCode());
         aggregatedId = String.format(format,
-                aopConfig.aggregateTcpBinders ? "A" : rouplexTcpBinder.hashCode()
-        );
+            aopInstrumentor.aopConfig.aggregateTcpSelectors ? "A" : rouplexTcpSelector.hashCode());
 
         handleSelectedKey = aopInstrumentor.metricRegistry.meter(MetricRegistry.name(aggregatedId, "handleSelectedKey"));
 
@@ -60,16 +58,8 @@ public class RouplexTcpBinderReporter {
                             int totalKeys = 0;
 
                             try {
-                                for (RouplexTcpBinder tcpBinder : aopInstrumentor.tcpBinders.keySet()) {
-                                    RouplexTcpSelector markedTcpSelector = tcpBinder.nextRouplexTcpSelector();
-
-                                    while (true) {
-                                        RouplexTcpSelector tcpSelector = tcpBinder.nextRouplexTcpSelector();
-                                        totalKeys += tcpSelector.selector.keys().size();
-                                        if (tcpSelector == markedTcpSelector) {
-                                            break;
-                                        }
-                                    }
+                                for (RouplexTcpSelector tcpSelector : aopInstrumentor.tcpSelectors.keySet()) {
+                                   //aaa totalKeys += tcpSelector.selector.keys().size();
                                 }
                             } catch (ConcurrentModificationException cme) {
                                 // no biggie return whatever, rather than synchronize and get on tests way
@@ -84,9 +74,17 @@ public class RouplexTcpBinderReporter {
 
     }
 
-    public Object logHandleSelectedKeyException(ProceedingJoinPoint pjp) throws Throwable {
+    public Object reportHandleSelectedKeyException(ProceedingJoinPoint pjp) throws Throwable {
         Exception e = (Exception) pjp.getArgs()[0];
-        logger.info(String.format("logHandleSelectedKeyException %s : %s", e.getClass(), e.getMessage()));
+        logger.warning(String.format("handleSelectedKeyException %s : %s : %s",
+            e.getClass().getSimpleName(), e.getMessage(), AopInstrumentor.getStackTrace(e)));
+        return pjp.proceed();
+    }
+
+    public Object reportHandleSelectException(ProceedingJoinPoint pjp) throws Throwable {
+        Exception e = (Exception) pjp.getArgs()[0];
+        logger.warning(String.format("handleSelectException %s : %s : %s",
+            e.getClass().getSimpleName(), e.getMessage(), AopInstrumentor.getStackTrace(e)));
         return pjp.proceed();
     }
 

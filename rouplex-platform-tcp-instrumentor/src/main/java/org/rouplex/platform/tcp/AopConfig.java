@@ -7,12 +7,14 @@ import java.util.Properties;
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class AopConfig {
+    boolean useShortFormat;
+
     boolean aggregateLocalAddresses;
     boolean aggregateLocalPorts;
     boolean aggregateRemoteAddresses;
     boolean aggregateRemotePorts;
 
-    boolean aggregateTcpBinders;
+    boolean aggregateTcpSelectors;
 
     AopConfig() {
     }
@@ -36,8 +38,14 @@ public class AopConfig {
         aopConfig.aggregateLocalPorts = true;
         aopConfig.aggregateRemoteAddresses = true;
         aopConfig.aggregateRemotePorts = true;
-        aopConfig.aggregateTcpBinders = true;
+        aopConfig.aggregateTcpSelectors = true;
 
+        return aopConfig;
+    }
+
+    public static AopConfig shortFormat() {
+        AopConfig aopConfig = new AopConfig();
+        aopConfig.useShortFormat = true;
         return aopConfig;
     }
 }

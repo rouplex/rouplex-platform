@@ -25,10 +25,10 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * A class representing a TCP client connected to a remote endpoint and optionally to a local one. It provides access
- * to the related output and input streams via {@link Sender} and {@link Receiver} interfaces.
+ * to the related input and output streams via {@link Receiver} and {@link Sender} interfaces.
  *
- * Instances of this class are built via the builder obtainable in turn via the {@link RouplexTcpClient#newBuilder()}
- * static method.
+ * Instances of this class are obtained via the builder obtainable in its turn via a call to
+ * {@link RouplexTcpBinder#newRouplexTcpClientBuilder()}.
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
@@ -44,6 +44,10 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
     public static class Builder extends RouplexTcpEndPoint.Builder<RouplexTcpClient, Builder> {
         protected SocketAddress remoteAddress;
         protected RouplexTcpClientListener rouplexTcpClientListener;
+
+        Builder(RouplexTcpBinder rouplexTcpBinder) {
+            super(rouplexTcpBinder);
+        }
 
         protected void checkCanBuild() {
             if (remoteAddress == null) {
@@ -151,28 +155,14 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
                 selectableChannel = sslContext == null ? SocketChannel.open() : SSLSocketChannel.open(sslContext);
             }
 
-            RouplexTcpClient result = new RouplexTcpClient(this);
-            builder = null;
-            result.connectAsync();
-            return result;
+            return new RouplexTcpClient(this);
         }
-    }
-
-    /**
-     * Create a new builder to be used to build a RouplexTcpClient.
-     *
-     * @return
-     *          the new builder
-     */
-    public static Builder newBuilder() {
-        return new Builder();
     }
 
     /**
      * Internal class for throttling the incoming traffic.
      */
     class ThrottledReceiver extends Throttle {
-        private final SelectionKey selectionKey;
         @Nullable
         private Receiver<byte[]> receiver;
         boolean eosReceived;
@@ -181,10 +171,6 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
         private long rateLimitCurrentBytes;
         private long rateLimitBytes;
         private long rateLimitMillis;
-
-        private ThrottledReceiver(SelectionKey selectionKey) {
-            this.selectionKey = selectionKey;
-        }
 
         @Override
         public boolean setMaxRate(long maxRate, long duration, TimeUnit timeUnit) {
@@ -196,13 +182,13 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
 
         @Override
         public boolean pause() {
-            rouplexTcpSelector.asyncPauseRead(selectionKey, Long.MAX_VALUE); // 295 million years
+            rouplexTcpSelector.asyncPauseInterestOps(selectionKey, SelectionKey.OP_READ, 0 /*forever*/);
             return true;
         }
 
         @Override
         public void resume() {
-            rouplexTcpSelector.asyncResumeRead(selectionKey);
+            rouplexTcpSelector.asyncResumeInterestOps(selectionKey, SelectionKey.OP_READ);
         }
 
         /**
@@ -215,11 +201,11 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
          * @return
          *          true if there is no receiver or if the receiver was able to receive the payload, false otherwise
          */
-        boolean consumeSocketInput(byte[] payload) {
-            boolean consumed = receiver == null || receiver.receive(payload);
+        long handleSocketInput(byte[] payload) {
+            long resumeTimestamp = receiver == null || receiver.receive(payload) ? -1 : 0;
 
             if (payload == null) {
-                return true;
+                return 0; // not used
             }
 
             if (rateLimitCurrentTimestamp != 0) {
@@ -229,16 +215,17 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
                 } else {
                     rateLimitCurrentBytes += payload.length;
                     if (rateLimitCurrentBytes > rateLimitBytes) {
-                        rouplexTcpSelector.asyncPauseRead(selectionKey, rateLimitCurrentTimestamp);
+                        resumeTimestamp = rateLimitCurrentTimestamp;
                     }
                 }
             }
 
             if (eosReceived = payload == EOS_BA) {
                 handleEos();
+                resumeTimestamp = 0;
             }
 
-            return consumed;
+            return resumeTimestamp;
         }
     }
 
@@ -247,23 +234,12 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
      */
     class ThrottledSender implements Sender<ByteBuffer> {
         private final LinkedList<ByteBuffer> writeBuffers = new LinkedList<ByteBuffer>();
-        private final SelectionKey selectionKey;
 
         private long remaining;
         private Throttle throttle;
         boolean paused;
         boolean eosReceived;
         boolean eosApplied;
-
-        private ThrottledSender(SelectionKey selectionKey) {
-            this.selectionKey = selectionKey;
-
-            try {
-                remaining = ((SocketChannel) selectableChannel).socket().getSendBufferSize();
-            } catch (IOException ioe) {
-                throw new RuntimeException(ioe);
-            }
-        }
 
         /**
          * Copy bytes from source to destination, adjusting their positions accordingly. This call does not fail if
@@ -365,9 +341,13 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
             synchronized (lock) {
                 writeBuffers.add(writeBuffer);
                 throttle = paused ? this.throttle : null;
-            }
 
-            rouplexTcpSelector.asyncResumeWrite(selectionKey);
+                if (selectionKey != null) { // call to send comes before the selector has registered our channel
+                    // no risk of deadlocking (since we'd be acquiring selector's lock as well) since selector always
+                    // fires lock free
+                    rouplexTcpSelector.asyncResumeInterestOps(selectionKey, SelectionKey.OP_WRITE);
+                }
+            }
 
             if (throttle != null) {
                 try {
@@ -376,29 +356,30 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
                     // would imply the pause, or (3) fire them from within the locked space (at risk of deadlocks)
                     throttle.pause();
                 } catch (RuntimeException re) {
-                    closeSilently(re);
+                    close(re);
                 }
             }
         }
 
         ByteBuffer pollFirstWriteBuffer() {
             synchronized (lock) {
-                return writeBuffers.isEmpty() ? null : writeBuffers.iterator().next();
+                return writeBuffers.isEmpty() ? null : writeBuffers.getFirst();
             }
         }
 
         /**
-         * Called after all the content of a {@link ByteBuffer} has been written to the network. Eventually resume
-         * the writes.
+         * Called by {@link RouplexTcpSelector} after all the content of a {@link ByteBuffer} has been written to the
+         * network. Eventually this call will notify the sender to resume writes. Always called from the same thread,
+         * responsible for work in the underlying channel.
          *
          * @param writeBuffer
-         *          the writeBuffer in the internal que, and to be removed
+         *          the writeBuffer in the internal queue, and to be removed
          */
         void removeWriteBuffer(ByteBuffer writeBuffer) {
             Throttle throttle;
 
             synchronized (lock) {
-                writeBuffers.remove(writeBuffer);
+                writeBuffers.removeFirst();
                 remaining += writeBuffer.limit();
 
                 if (paused) {
@@ -421,11 +402,13 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
     }
 
     /**
-     * Update the RouplexTcpClient taking into consideration the state of its sender and receiver.
+     * Update the RouplexTcpClient taking into consideration the state of its sender and receiver. This method is
+     * always called from the same (RouplexTcpSelector) thread for the same RouplexTcpClient instance, so there is no
+     * need to synchronize the values of eosApplied and eosReceived since they get updated by the same thread.
      */
     private void handleEos() {
         if (throttledSender.eosApplied && throttledReceiver.eosReceived) {
-            closeSilently(null); // a successful close
+            syncClose(null); // a successful close
         }
     }
 
@@ -433,7 +416,7 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
      * Called by {@link RouplexTcpSelector} when the underlying channel just got connected to the remote endpoint.
      */
     void handleConnected() {
-        handleOpen(null);
+        handleOpen();
 
         if (rouplexTcpClientListener != null) {
             rouplexTcpClientListener.onConnected(this);
@@ -451,6 +434,8 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
 
     /**
      * Called by {@link RouplexTcpSelector} when the underlying channel just got disconnected from the remote endpoint.
+     * Always called from the same thread, which is also the one updating eosReceived and eosApplied, so no need for
+     * synchronization here.
      */
     boolean handleDisconnected(@Nullable Exception optionalReason) {
         boolean drainedChannels = throttledReceiver.eosReceived && throttledSender.eosApplied;
@@ -465,20 +450,36 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
     protected final RouplexTcpServer rouplexTcpServer; // not null if this channel was created by a rouplexTcpServer
     protected final RouplexTcpClientListener rouplexTcpClientListener;
 
-    protected ThrottledSender throttledSender;
-    protected ThrottledReceiver throttledReceiver;
+    protected final ThrottledSender throttledSender = new ThrottledSender();
+    protected final ThrottledReceiver throttledReceiver = new ThrottledReceiver();
 
+    private SelectionKey selectionKey;
     /**
      * Construct an instance using a prepared {@link Builder} instance.
      *
      * @param builder
      *          the builder providing all needed info for creation of the client
      */
-    RouplexTcpClient(Builder builder) {
+    RouplexTcpClient(Builder builder) throws IOException {
         super(builder);
 
-        this.rouplexTcpServer = null;
-        this.rouplexTcpClientListener = builder.rouplexTcpClientListener;
+        rouplexTcpServer = null;
+        rouplexTcpClientListener = builder.rouplexTcpClientListener;
+
+        SocketChannel socketChannel = (SocketChannel) selectableChannel;
+        if (builder.sendBufferSize != 0) {
+            socketChannel.socket().setSendBufferSize(builder.sendBufferSize);
+        }
+        if (builder.receiveBufferSize != 0) {
+            socketChannel.socket().setReceiveBufferSize(builder.receiveBufferSize);
+        }
+
+        if (!socketChannel.isConnectionPending() && !socketChannel.isConnected()) {
+            socketChannel.configureBlocking(false);
+            socketChannel.connect(builder.remoteAddress);
+        }
+
+        rouplexTcpSelector.asyncRegisterTcpEndPoint(this);
     }
 
     /**
@@ -491,28 +492,18 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
      * @param rouplexTcpServer
      *          the rouplexTcpServer which accepted the underlying channel
      */
-    RouplexTcpClient(SocketChannel socketChannel, RouplexTcpSelector rouplexTcpSelector, RouplexTcpServer rouplexTcpServer) {
+    RouplexTcpClient(SocketChannel socketChannel, RouplexTcpSelector rouplexTcpSelector, RouplexTcpServer rouplexTcpServer) throws IOException {
         super(socketChannel, rouplexTcpSelector);
 
         this.rouplexTcpServer = rouplexTcpServer;
         this.rouplexTcpClientListener = null;
-    }
 
-    /**
-     * Start the connection sequence if the underlying channel is not already connected.
-     *
-     * @throws IOException
-     *          if any problem arises
-     */
-    private void connectAsync() throws IOException {
-        SocketChannel socketChannel = (SocketChannel) selectableChannel;
-
-        socketChannel.configureBlocking(false);
-        if (!socketChannel.isConnectionPending() && !socketChannel.isConnected()) {
-            socketChannel.connect(((Builder) builder).remoteAddress);
+        if (rouplexTcpServer.sendBufferSize != 0) {
+            socketChannel.socket().setSendBufferSize(rouplexTcpServer.sendBufferSize);
         }
-
-        rouplexTcpSelector.asyncRegisterTcpEndPoint(this);
+        if (rouplexTcpServer.receiveBufferSize != 0) {
+            socketChannel.socket().setReceiveBufferSize(rouplexTcpServer.receiveBufferSize);
+        }
     }
 
     /**
@@ -541,12 +532,13 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
      *          the selection key, result of registering this channel with the RouplexTcpSelector's selector
      */
     void setSelectionKey(SelectionKey selectionKey) {
-        throttledSender = new ThrottledSender(selectionKey);
-        throttledReceiver = new ThrottledReceiver(selectionKey);
+        synchronized (lock) {
+            this.selectionKey = selectionKey;
+        }
     }
 
     /**
-     * Hook (rather get) the {@link Sender} to use for sending bytes via this client. The throttle parameter will be
+     * Obtain (or get) the {@link Sender} to use for sending bytes via this client. The throttle parameter will be
      * used by this instance to notify when to resume after a pause.
      *
      * The units of data to be sent via the Sender is a {@link ByteBuffer}. Upon the return from this call the
@@ -567,22 +559,39 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
      *
      * @param throttle
      *          a throttle instance to be used to control the traffic flow (via calls to pause / resume)
+     * @param sendBufferSize
+     *          the size of the tcp client buffer. If 0 then the underlying socket's sendBufferSize will be used, or if
+     *          that cannot be retrieved, a default value of 64kb will be used.
      * @return
      *          the sender to be used to send ByteBuffer payloads.
      */
-    public Sender<ByteBuffer> hookSendChannel(Throttle throttle) {
+    public Sender<ByteBuffer> obtainSendChannel(Throttle throttle, int sendBufferSize) {
         synchronized (lock) {
             if (throttledSender.throttle != null) {
                 throw new IllegalStateException("Send channel already hooked.");
             }
 
+            if (throttle == null) {
+                throw new IllegalArgumentException("Throttle cannot be null.");
+            }
+
+            if (sendBufferSize == 0) {
+                try {
+                    sendBufferSize = ((SocketChannel) selectableChannel).socket().getSendBufferSize();
+                    // not likely, but let's protect against the case where it still returns 0
+                } catch (IOException ioe) {
+                    // it will remain 0
+                }
+            }
+
+            throttledSender.remaining = sendBufferSize != 0 ? sendBufferSize : 0x10000; // 64kb default
             throttledSender.throttle = throttle;
             return throttledSender;
         }
     }
 
     /**
-     * Hook (or set) the {@link Receiver} which will be receiving the bytes read by this client. Whenever there are
+     * Assign (or set) the {@link Receiver} which will be receiving the bytes read by this client. Whenever there are
      * bytes available, they will be passed to the receiver by this client via a {@link Receiver#receive(Object)} call.
      *
      * See {@link Receiver} for general details about handling the payload received. In this particular case, the
@@ -612,7 +621,7 @@ public class RouplexTcpClient extends RouplexTcpEndPoint {
      * @return
      *          the throttle construct which the receiver can use to control the flow of receiving bytes
      */
-    public Throttle hookReceiveChannel(@Nullable Receiver<byte[]> receiver, boolean started) {
+    public Throttle assignReceiveChannel(@Nullable Receiver<byte[]> receiver, boolean started) {
         synchronized (lock) {
             if (throttledReceiver.receiver != null) {
                 throw new IllegalStateException("Receive channel already hooked.");

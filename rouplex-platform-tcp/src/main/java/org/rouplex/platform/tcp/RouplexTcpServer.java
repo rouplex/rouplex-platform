@@ -12,8 +12,8 @@ import java.nio.channels.ServerSocketChannel;
  * A class representing a TCP server and which provides the mechanism to accept new connections from remote endpoints
  * and create {@link RouplexTcpClient}s by wrapping them.
  *
- * Instances of this class are obtained via the inner builder, which in turn is instantiated via the
- * {@link RouplexTcpServer#newBuilder()} static method.
+ * Instances of this class are obtained via the builder obtainable in its turn via a call to
+ * {@link RouplexTcpBinder#newRouplexTcpServerBuilder()}.
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
@@ -26,6 +26,11 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
     public static class Builder extends RouplexTcpEndPoint.Builder<RouplexTcpServer, Builder> {
         protected int backlog;
         protected RouplexTcpServerListener rouplexTcpServerListener;
+        protected RouplexTcpClientListener rouplexTcpClientListener;
+
+        Builder(RouplexTcpBinder rouplexTcpBinder) {
+            super(rouplexTcpBinder);
+        }
 
         protected void checkCanBuild() {
             if (localAddress == null) {
@@ -50,8 +55,7 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
         }
 
         /**
-         * The classic server backlog, indicating the maximum number of connections that should be allowed to be ready
-         * for accept.
+         * The server backlog, indicating the maximum number of connections pending accept.
          *
          * @param backlog
          *          the max number of pending connections
@@ -106,6 +110,21 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
         }
 
         /**
+         * Set the server lifecycle event listener, providing events related to binding or unbinding a server.
+         *
+         * @param rouplexTcpClientListener
+         *          the event listener
+         * @return
+         *          the reference to this builder for chaining calls
+         */
+        public Builder withRouplexTcpClientListener(RouplexTcpClientListener rouplexTcpClientListener) {
+            checkNotBuilt();
+
+            this.rouplexTcpClientListener = rouplexTcpClientListener;
+            return builder;
+        }
+
+        /**
          * Build the server and bind it to the local address before returning.
          *
          * @return
@@ -123,55 +142,36 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
                         ? ServerSocketChannel.open() : SSLServerSocketChannel.open(sslContext);
             }
 
-            RouplexTcpServer result = new RouplexTcpServer(this);
-            builder = null;
-            return result.bind();
+            return new RouplexTcpServer(this);
         }
     }
 
-    /**
-     * Create a new builder to be used to build a RouplexTcpServer.
-     *
-     * @return
-     *          the new builder
-     */
-    public static Builder newBuilder() {
-        return new Builder();
-    }
+    final int sendBufferSize;
+    final int receiveBufferSize;
+    final RouplexTcpServerListener rouplexTcpServerListener;
 
-    protected final RouplexTcpServerListener rouplexTcpServerListener;
-
-    RouplexTcpServer(Builder builder) {
+    RouplexTcpServer(Builder builder) throws IOException {
         super(builder);
 
-        this.rouplexTcpServerListener = builder.rouplexTcpServerListener;
-    }
+        sendBufferSize = builder.sendBufferSize;
+        receiveBufferSize = builder.receiveBufferSize;
+        rouplexTcpServerListener = builder.rouplexTcpServerListener;
 
-    /**
-     * Configure and bind the internal {@link ServerSocketChannel}.
-     *
-     * @return
-     *          the bound server
-     * @throws IOException
-     *          if any problem arose trying to bind the server
-     */
-    private RouplexTcpServer bind() throws IOException {
         ServerSocketChannel serverSocketChannel = (ServerSocketChannel) selectableChannel;
-
-        if (builder.receiveBufferSize != 0) {
-            // serverSocket doesn't have sendBufferSize, and receiveBufferSize is not honored (at least in macosx
-            // where I am developing/testing), we set this value on individually accepted sockets again anyway
-            serverSocketChannel.socket().setReceiveBufferSize(builder.receiveBufferSize);
-        }
 
         serverSocketChannel.configureBlocking(false);
         if (!serverSocketChannel.socket().isBound()) {
+            if (builder.receiveBufferSize != 0) {
+                // serverSocket doesn't have sendBufferSize, and receiveBufferSize must be set beforehand for values
+                // over 64kb (we set it for all > 0), then set again on the individual accepted sockets
+                serverSocketChannel.socket().setReceiveBufferSize(builder.receiveBufferSize);
+            }
+
             // jdk1.7+ serverSocketChannel.bind(builder.localAddress, ((Builder) builder).backlog);
-            serverSocketChannel.socket().bind(builder.localAddress, ((Builder) builder).backlog);
+            serverSocketChannel.socket().bind(builder.localAddress, builder.backlog);
         }
 
         rouplexTcpSelector.asyncRegisterTcpEndPoint(this);
-        return this;
     }
 
     /**
@@ -179,7 +179,7 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
      * registered with the internal {@link Selector}, to update the server's state and fire the onBound notification.
      */
     void handleBound() {
-        handleOpen(null);
+        handleOpen();
 
         if (rouplexTcpServerListener != null) {
             rouplexTcpServerListener.onBound(this);

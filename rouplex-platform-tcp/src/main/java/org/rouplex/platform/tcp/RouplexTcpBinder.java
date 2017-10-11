@@ -17,17 +17,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * or {@link RouplexTcpServer}s. Internally, it spawns a number of RouplexTcpSelector instances, which will be handling
  * events related to all registered clients and servers.
  *
- * There are two creation patterns for instances of this class:
- *
- * (1) Created via its constructor and passed to one or more {@link RouplexTcpClient}s or {@link RouplexTcpServer}s via
- * {@link RouplexTcpClient.Builder#withRouplexTcpBinder(RouplexTcpBinder)} or
- * {@link RouplexTcpServer.Builder#withRouplexTcpBinder(RouplexTcpBinder)}. In this case, the various clients and/or
- * servers created will not close this instance when they are closed.
- *
- * (2) Created by {@link RouplexTcpClient.Builder} or {@link RouplexTcpServer.Builder} when there is no RouplexTcpBinder
- * assigned to it, in which case a RouplexTcpBinder will be created automatically and used by the endpoint created. In
- * that case, the RouplexTcpBinder will be closed by that endpoint when the endpoint is closed in its turn.
- *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class RouplexTcpBinder implements Closeable {
@@ -39,15 +28,6 @@ public class RouplexTcpBinder implements Closeable {
             } catch (IOException ioe) {
                 throw new RuntimeException("Could not create SSLSelector", ioe);
             }
-        }
-    };
-
-    private final static ThreadFactory DEFAULT_THREAD_FACTORY = new ThreadFactory() {
-        @Override
-        public Thread newThread(Runnable runnable) {
-            Thread thread = new Thread(runnable);
-            thread.setDaemon(true);
-            return thread;
         }
     };
 
@@ -112,8 +92,19 @@ public class RouplexTcpBinder implements Closeable {
     public RouplexTcpBinder(Supplier<Selector> selectorSupplier, ExecutorService executorService, int readBufferSize) {
         tcpSelectors = new RouplexTcpSelector[Runtime.getRuntime().availableProcessors()];
 
-        this.executorService = (sharedExecutorService = executorService != null)
-                ? executorService : Executors.newFixedThreadPool(tcpSelectors.length, DEFAULT_THREAD_FACTORY);
+        this.executorService = (sharedExecutorService = executorService != null) ? executorService
+            : Executors.newFixedThreadPool(tcpSelectors.length, new ThreadFactory() {
+
+            AtomicInteger counter = new AtomicInteger();
+
+            @Override
+            public Thread newThread(Runnable runnable) {
+                Thread thread = new Thread(runnable);
+                thread.setDaemon(true);
+                thread.setName("RouplexTcpBinder-" + RouplexTcpBinder.this.hashCode() + "-" + counter.incrementAndGet());
+                return thread;
+            }
+        });
 
         if (readBufferSize <= 0) {
             throw new IllegalArgumentException("Read buffer size must be positive");
@@ -122,6 +113,26 @@ public class RouplexTcpBinder implements Closeable {
         for (int index = 0; index < tcpSelectors.length; index++) {
             tcpSelectors[index] = new RouplexTcpSelector(this, selectorSupplier.get(), readBufferSize);
         }
+    }
+
+    /**
+     * Create a new builder to be used to build a RouplexTcpClient.
+     *
+     * @return
+     *          the new builder
+     */
+    public RouplexTcpClient.Builder newRouplexTcpClientBuilder() {
+        return new RouplexTcpClient.Builder(this);
+    }
+
+    /**
+     * Create a new builder to be used to build a RouplexTcpServer.
+     *
+     * @return
+     *          the new builder
+     */
+    public RouplexTcpServer.Builder newRouplexTcpServerBuilder() {
+        return new RouplexTcpServer.Builder(this);
     }
 
     /**

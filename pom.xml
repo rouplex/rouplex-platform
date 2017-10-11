@@ -119,7 +119,7 @@
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-niossl</artifactId>
-                <version>${jdk}.2</version>
+                <version>${jdk}.3</version>
             </dependency>
 
             <dependency>
@@ -262,6 +262,6 @@
         <module>rouplex-platform-jaxrs-client</module>
         <module>rouplex-platform-jersey</module>
         <module>rouplex-platform-tcp</module>
-        <module>rouplex-platform-tcp-instrumentor</module>
+        <!--<module>rouplex-platform-tcp-instrumentor</module>-->
     </modules>
 </project>
