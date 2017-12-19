@@ -2,12 +2,10 @@ package org.rouplex.platform.tcp;
 
 import org.rouplex.commons.annotations.GuardedBy;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
 
 /**
  * Internal class, not to be accessed directly by the user. It performs tasks related to registering and unregistering
@@ -23,10 +21,10 @@ import java.util.concurrent.ExecutorService;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-class RouplexTcpSelector implements Closeable {
+class RouplexTcpSelector implements Runnable {
     private final Object lock = new Object();
 
-    private final RouplexTcpBinder rouplexTcpBinder;
+    private final RouplexTcpBroker rouplexTcpBroker;
     private final Selector selector;
     private final ByteBuffer readBuffer;
 
@@ -62,12 +60,10 @@ class RouplexTcpSelector implements Closeable {
         }
     }
 
-    RouplexTcpSelector(RouplexTcpBinder rouplexTcpBinder, Selector selector, int readBufferSize) {
-        this.rouplexTcpBinder = rouplexTcpBinder;
+    RouplexTcpSelector(RouplexTcpBroker rouplexTcpBroker, Selector selector, int readBufferSize) {
+        this.rouplexTcpBroker = rouplexTcpBroker;
         this.selector = selector;
         this.readBuffer = ByteBuffer.allocate(readBufferSize);
-
-        start(rouplexTcpBinder.getExecutorService());
     }
 
     /**
@@ -119,23 +115,15 @@ class RouplexTcpSelector implements Closeable {
 
                 if (connected) {
                     tcpClient.handleConnected();
-
-                    if (rouplexTcpBinder.rouplexTcpClientListener != null) {
-                        rouplexTcpBinder.rouplexTcpClientListener.onConnected(tcpClient);
-                    }
                 }
             } else if (tcpEndPoint instanceof RouplexTcpServer) {
                 selectableChannel.register(selector, SelectionKey.OP_ACCEPT, tcpEndPoint);
                 RouplexTcpServer tcpServer = (RouplexTcpServer) tcpEndPoint;
                 tcpServer.handleBound();
-
-                if (rouplexTcpBinder.rouplexTcpServerListener != null) {
-                    rouplexTcpBinder.rouplexTcpServerListener.onBound(tcpServer);
-                }
             }
         } catch (Exception e) {
-            // ClosedChannelException | IllegalBlockingModeException | RuntimeException from notifyConnectedTcpClient()
-            syncClose(tcpEndPoint, e);
+            // ClosedChannelException | IllegalBlockingModeException | RuntimeException from handle/Connected()/Bound()
+            unregisterTcpEndPoint(tcpEndPoint, e);
         }
 
         return keepAccepting;
@@ -150,12 +138,8 @@ class RouplexTcpSelector implements Closeable {
      * @param optionalReason
      *          if there was an exception which resulted in the endpoint being closed, null otherwise
      */
-    void asyncUnregisterTcpEndPoint(RouplexTcpEndPoint tcpEndPoint, Exception optionalReason) throws IOException {
+    void asyncUnregisterTcpEndPoint(RouplexTcpEndPoint tcpEndPoint, Exception optionalReason) {
         synchronized (lock) {
-            if (closed) {
-                throw new IOException("RouplexTcpSelector already closed.");
-            }
-
             unregisteringTcpEndPoints.put(tcpEndPoint, optionalReason);
         }
 
@@ -175,142 +159,122 @@ class RouplexTcpSelector implements Closeable {
             if (tcpEndPoint instanceof RouplexTcpClient) {
                 RouplexTcpClient tcpClient = (RouplexTcpClient) tcpEndPoint;
                 if (tcpClient.open) {
-                    boolean drainedChannels = tcpClient.handleDisconnected(optionalReason);
-
-                    if (rouplexTcpBinder.rouplexTcpClientListener != null) {
-                        rouplexTcpBinder.rouplexTcpClientListener.onDisconnected(tcpClient, optionalReason, drainedChannels);
-                    }
-                }
-                else {
+                    tcpClient.handleDisconnected(optionalReason);
+                } else {
                     tcpClient.handleConnectionFailed(optionalReason);
-
-                    if (rouplexTcpBinder.rouplexTcpClientListener != null) {
-                        rouplexTcpBinder.rouplexTcpClientListener.onConnectionFailed(tcpClient, optionalReason);
-                    }
                 }
             }
 
             else if (tcpEndPoint instanceof RouplexTcpServer) {
                 RouplexTcpServer tcpServer = (RouplexTcpServer) tcpEndPoint;
                 tcpServer.handleUnBound();
-
-                if (rouplexTcpBinder.rouplexTcpServerListener != null) {
-                    rouplexTcpBinder.rouplexTcpServerListener.onUnBound(tcpServer);
-                }
             }
         } catch (Exception e) {
             // channel is already closed, nothing to do
         }
     }
 
-    private void start(final ExecutorService executorService) {
-        executorService.submit(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    while (true) {
-                        if (executorService.isShutdown() /* anti pattern || Thread.currentThread().isInterrupted() */) {
-                            close();
-                        }
+    @Override
+    public void run() {
+        try {
+            while (true) {
+                long now = System.currentTimeMillis();
+                List<RouplexTcpEndPoint> registerTcpEndPoints;
+                Map<RouplexTcpEndPoint, Exception> unregisterTcpEndPoints;
 
-                        long now = System.currentTimeMillis();
-                        List<RouplexTcpEndPoint> registerTcpEndPoints;
-                        Map<RouplexTcpEndPoint, Exception> unregisterTcpEndPoints;
-                        synchronized (lock) {
-                            if (closed) {
-                                break;
-                            }
-
-                            if (registeringTcpEndPoints.isEmpty()) {
-                                registerTcpEndPoints = null;
-                            } else {
-                                registerTcpEndPoints = registeringTcpEndPoints;
-                                registeringTcpEndPoints = new ArrayList<RouplexTcpEndPoint>();
-                            }
-
-                            if (unregisteringTcpEndPoints.isEmpty()) {
-                                unregisterTcpEndPoints = null;
-                            } else {
-                                unregisterTcpEndPoints = unregisteringTcpEndPoints;
-                                unregisteringTcpEndPoints = new HashMap<RouplexTcpEndPoint, Exception>();
-                            }
-
-                            if (!pausingInterestOps.isEmpty()) {
-                                for (PendingOps pausingOps : pausingInterestOps) {
-                                    pauseInterestOps(pausingOps);
-                                }
-
-                                pausingInterestOps = new ArrayList<PendingOps>();
-                            }
-
-                            if (!resumingInterestOps.isEmpty()) {
-                                for (PendingOps resumingOps : resumingInterestOps) {
-                                    try {
-                                        resumingOps.enablePendingOps();
-                                    } catch (CancelledKeyException cke) {
-                                        // key will be removed from selector on next select
-                                    }
-                                }
-
-                                resumingInterestOps = new ArrayList<PendingOps>();
-                            }
-                        }
-
-                        if (registerTcpEndPoints != null) {
-                            // fire only lock-free events towards client! The trade off is that a new channel may fire
-                            // after a close() call, but that same channel will be closed shortly after anyway
-                            for (RouplexTcpEndPoint tcpEndPoint : registerTcpEndPoints) {
-                                registerTcpEndPoint(tcpEndPoint);
-                            }
-                        }
-
-                        if (unregisterTcpEndPoints != null) {
-                            for (Map.Entry<RouplexTcpEndPoint, Exception> tcpEndPoint : unregisterTcpEndPoints.entrySet()) {
-                                unregisterTcpEndPoint(tcpEndPoint.getKey(), tcpEndPoint.getValue());
-                            }
-                        }
-
-                        long selectTimeout = 0;
-                        for (Iterator<Map.Entry<Long, List<PendingOps>>> iterator = resumingLaterInterestOps.entrySet().iterator(); iterator.hasNext(); ) {
-                            Map.Entry<Long, List<PendingOps>> resumingOpsAtSameTime = iterator.next();
-
-                            if (resumingOpsAtSameTime.getKey() > now) {
-                                selectTimeout = resumingOpsAtSameTime.getKey() - now;
-                                break;
-                            }
-
-                            for (PendingOps resumingOps : resumingOpsAtSameTime.getValue()) {
-                                try {
-                                    resumingOps.enablePendingOps();
-                                } catch (CancelledKeyException e) {
-                                    // key will be removed from selector on next select
-                                }
-                            }
-
-                            iterator.remove();
-                        }
-
-                        selector.selectedKeys().clear();
-                        selector.select(selectTimeout);
-
-                        for (SelectionKey selectionKey : selector.selectedKeys()) {
-                            handleSelectedKey(selectionKey);
-                        }
+                synchronized (lock) {
+                    if (closed) {
+                        break;
                     }
-                } catch (Exception e) {
-                    handleSelectException(e);
+
+                    if (registeringTcpEndPoints.isEmpty()) {
+                        registerTcpEndPoints = null;
+                    } else {
+                        registerTcpEndPoints = registeringTcpEndPoints;
+                        registeringTcpEndPoints = new ArrayList<RouplexTcpEndPoint>();
+                    }
+
+                    if (unregisteringTcpEndPoints.isEmpty()) {
+                        unregisterTcpEndPoints = null;
+                    } else {
+                        unregisterTcpEndPoints = unregisteringTcpEndPoints;
+                        unregisteringTcpEndPoints = new HashMap<RouplexTcpEndPoint, Exception>();
+                    }
+
+                    if (!pausingInterestOps.isEmpty()) {
+                        for (PendingOps pausingOps : pausingInterestOps) {
+                            pauseInterestOps(pausingOps);
+                        }
+
+                        pausingInterestOps = new ArrayList<PendingOps>();
+                    }
+
+                    if (!resumingInterestOps.isEmpty()) {
+                        for (PendingOps resumingOps : resumingInterestOps) {
+                            try {
+                                resumingOps.enablePendingOps();
+                            } catch (CancelledKeyException cke) {
+                                // key will be removed from selector on next select
+                            }
+                        }
+
+                        resumingInterestOps = new ArrayList<PendingOps>();
+                    }
                 }
 
-                syncClose(); // close synchronously.
+                if (registerTcpEndPoints != null) {
+                    // fire only lock-free events towards client! The trade off is that a new channel may fire
+                    // after a close() call, but that same channel will be closed shortly after anyway
+                    for (RouplexTcpEndPoint tcpEndPoint : registerTcpEndPoints) {
+                        registerTcpEndPoint(tcpEndPoint);
+                    }
+                }
+
+                if (unregisterTcpEndPoints != null) {
+                    for (Map.Entry<RouplexTcpEndPoint, Exception> tcpEndPoint : unregisterTcpEndPoints.entrySet()) {
+                        unregisterTcpEndPoint(tcpEndPoint.getKey(), tcpEndPoint.getValue());
+                    }
+                }
+
+                long selectTimeout = 0;
+                for (Iterator<Map.Entry<Long, List<PendingOps>>> iterator = resumingLaterInterestOps.entrySet().iterator(); iterator.hasNext(); ) {
+                    Map.Entry<Long, List<PendingOps>> resumingOpsAtSameTime = iterator.next();
+
+                    if (resumingOpsAtSameTime.getKey() > now) {
+                        selectTimeout = resumingOpsAtSameTime.getKey() - now;
+                        break;
+                    }
+
+                    for (PendingOps resumingOps : resumingOpsAtSameTime.getValue()) {
+                        try {
+                            resumingOps.enablePendingOps();
+                        } catch (CancelledKeyException e) {
+                            // key will be removed from selector on next select
+                        }
+                    }
+
+                    iterator.remove();
+                }
+
+                selector.selectedKeys().clear();
+                selector.select(selectTimeout);
+
+                for (SelectionKey selectionKey : selector.selectedKeys()) {
+                    handleSelectedKey(selectionKey);
+                }
             }
-        });
+        } catch (Exception e) {
+            handleSelectException(e);
+        }
+
+        syncClose(); // close synchronously.
     }
 
     void handleSelectedKey(SelectionKey selectionKey) {
         try {
             if (selectionKey.isAcceptable()) {
                 SocketChannel socketChannel = ((ServerSocketChannel) selectionKey.channel()).accept();
-                RouplexTcpSelector tcpSelector = rouplexTcpBinder.nextRouplexTcpSelector();
+                RouplexTcpSelector tcpSelector = rouplexTcpBroker.nextRouplexTcpSelector();
 
                 // asyncRegisterTcpEndPoint (and not registerTcpEndPoint) b/c tcpSelector is a different selector
                 tcpSelector.asyncRegisterTcpEndPoint(
@@ -330,20 +294,16 @@ class RouplexTcpSelector implements Closeable {
 
                     selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_CONNECT);
                     tcpClient.handleConnected();
-
-                    if (rouplexTcpBinder.rouplexTcpClientListener != null) {
-                        rouplexTcpBinder.rouplexTcpClientListener.onConnected(tcpClient);
-                    }
                 } catch (Exception e) {
                     // IOException | RuntimeException (from client handling notification)
                     // TODO differentiate between failedConnection and destroyed ...
-                    syncClose(tcpClient, e);
+                    unregisterTcpEndPoint(tcpClient, e);
                     return;
                 }
             }
 
             if (selectionKey.isReadable()) {
-                int read = 0;
+                int read;
                 try {
                     while ((read = socketChannel.read(readBuffer)) != 0) {
                         byte[] readPayload;
@@ -356,8 +316,12 @@ class RouplexTcpSelector implements Closeable {
                         }
 
                         long resumeTimestamp = tcpClient.throttledReceiver.handleSocketInput(readPayload);
+                        if (resumeTimestamp == -2) {
+                            unregisterTcpEndPoint(tcpClient, null);
+                            return;
+                        }
+
                         if (resumeTimestamp == -1) {
-                            read = 0;
                             continue;
                         }
 
@@ -396,9 +360,16 @@ class RouplexTcpSelector implements Closeable {
                             }
                         }
 
-                        tcpClient.throttledSender.removeWriteBuffer(writeBuffer);
+                        if (tcpClient.throttledSender.removeWriteBuffer(writeBuffer) == -2) {
+                            unregisterTcpEndPoint(tcpClient, null);
+                            return;
+                        }
                     } catch (Exception e) {
-                        // IOException | RuntimeException (from client handling resume)
+                        // IOException | RuntimeException (from client handling resume) | ClosedKeyException (detailed)
+                        // Especially in the case of SSLSocketChannel, the remote peer may have shutdown its ssl output
+                        // stream which produces ssl control data handled by the local peer's SSLEngine and which in
+                        // turn will close the local peer's outbound ssl stream. So the user is just realizing that its
+                        // output stream is not open anymore.
                         handleReadWriteUserException(tcpClient, e);
                         break;
                     }
@@ -425,7 +396,7 @@ class RouplexTcpSelector implements Closeable {
             }
         }
 
-        syncClose(tcpClient, e);
+        unregisterTcpEndPoint(tcpClient, e);
     }
 
     private void pauseInterestOps(PendingOps pausingOps) {
@@ -490,13 +461,7 @@ class RouplexTcpSelector implements Closeable {
         selector.wakeup();
     }
 
-    private void syncClose(RouplexTcpEndPoint rouplexTcpEndPoint, Exception e) {
-        rouplexTcpEndPoint.syncClose(e);
-        unregisterTcpEndPoint(rouplexTcpEndPoint, e);
-    }
-
-    @Override
-    public void close() {
+    void requestClose() {
         synchronized (lock) {
             if (closed) {
                 return;
@@ -513,7 +478,8 @@ class RouplexTcpSelector implements Closeable {
     }
 
     void handleSelectException(Exception e) {
-        // AOP wraps this call when debugging
+        // AOP wraps this call when debugging and the argument e provides useful info
+        rouplexTcpBroker.close(); // bubble up the fatal exception by asking the broker to close
     }
 
     /**
@@ -524,14 +490,14 @@ class RouplexTcpSelector implements Closeable {
         for (SelectionKey selectionKey : selector.keys()) {
             try {
                 ((RouplexTcpEndPoint) selectionKey.attachment()).close();
-            } catch (IOException ioe) {
+            } catch (RuntimeException ioe) { // IOE
             }
         }
 
         for (RouplexTcpEndPoint rouplexTcpEndPoint : registeringTcpEndPoints) {
             try {
                 rouplexTcpEndPoint.close();
-            } catch (IOException ioe) {
+            } catch (RuntimeException ioe) { // IOE
             }
         }
 

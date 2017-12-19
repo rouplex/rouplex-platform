@@ -1,6 +1,5 @@
 package org.rouplex.commons.utils;
 
-
 import java.text.ParseException;
 import java.util.regex.Pattern;
 

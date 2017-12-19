@@ -6,10 +6,8 @@ import org.rouplex.commons.annotations.Nullable;
 import javax.net.ssl.SSLContext;
 import java.io.Closeable;
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.net.UnknownHostException;
 import java.nio.channels.SelectableChannel;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
@@ -45,8 +43,8 @@ class RouplexTcpEndPoint implements Closeable {
         // used also as a marker for an already built endpoint (when set to null)
         protected B builder;
 
-        Builder(RouplexTcpBinder rouplexTcpBinder) {
-            rouplexTcpSelector = rouplexTcpBinder.nextRouplexTcpSelector();
+        Builder(RouplexTcpBroker rouplexTcpBroker) {
+            rouplexTcpSelector = rouplexTcpBroker.nextRouplexTcpSelector();
             builder = (B) this;
         }
 
@@ -68,15 +66,7 @@ class RouplexTcpEndPoint implements Closeable {
         public B withLocalAddress(@Nullable String hostname, int port) {
             checkNotBuilt();
 
-            if (hostname == null || hostname.length() == 0) {
-                try {
-                    hostname = InetAddress.getLocalHost().getHostAddress();
-                } catch (UnknownHostException e) {
-                    hostname = "localhost";
-                }
-            }
-
-            this.localAddress = new InetSocketAddress(hostname, port);
+            this.localAddress = new InetSocketAddress(hostname == null ? "localhost" : hostname, port);
             return builder;
         }
 
@@ -132,10 +122,13 @@ class RouplexTcpEndPoint implements Closeable {
     // not final, set and changed by user
     protected Object attachment;
 
+    // only set synchronously from broker
     protected boolean open;
+
+    // only set synchronously from broker
     private boolean closed;
 
-    private IOException ioException;
+    protected IOException ioException;
 
     /**
      * Constructor to create an endpoint via a builder. Builder's values will be copied to final instance fields. The
@@ -239,55 +232,43 @@ class RouplexTcpEndPoint implements Closeable {
     }
 
     @Override
-    public void close() throws IOException {
+    public void close() {
         close(null);
     }
 
-    void close(@Nullable Exception optionalException) throws IOException {
-        try {
-            rouplexTcpSelector.asyncUnregisterTcpEndPoint(this, ioException);
-        } catch (IOException rouplexTcpSelectorClosedException) {
-            // just ignore, call is only to release resources
-        }
-
-        if (ioException != null) {
-            throw ioException;
-        }
+    void close(@Nullable Exception optionalException) {
+        setExceptionAndCloseChannel(optionalException);
+        rouplexTcpSelector.asyncUnregisterTcpEndPoint(this, ioException);
     }
 
     /**
-     * Update internal state to "closed", signaling eventual waiting threads of the new state.
+     * Set the state to closed, and close the selectableChannel. The optionalException, or the exception during
+     * the selectableChannel close, if any, becomes the instance's ioException
      *
      * @param optionalException
      *          null if the endpoint closed without any problems. Otherwise, its value will be noted and will be thrown
      *          by the eventual thread calling {@link #waitForOpen(long)}.
      */
-    private void setExceptionAndCloseChannel(@Nullable Exception optionalException) {
+    void setExceptionAndCloseChannel(@Nullable Exception optionalException) {
         synchronized (lock) {
-            if (isClosed()) {
-                return;
-            }
+            if (!closed) {
+                closed = true;
+                lock.notifyAll();
 
-            closed = true;
-            lock.notifyAll();
-
-            if (ioException == null && optionalException != null) {
-                ioException = optionalException instanceof IOException
+                if (ioException == null && optionalException != null) {
+                    ioException = optionalException instanceof IOException
                         ? (IOException) optionalException : new IOException(optionalException);
-            }
+                }
 
-            try {
-                selectableChannel.close();
-            } catch (IOException ioe) {
-                if (ioException == null) {
-                    ioException = ioe;
+                try {
+                    selectableChannel.close();
+                } catch (IOException ioe) {
+                    if (ioException == null) {
+                        ioException = ioe;
+                    }
                 }
             }
         }
-    }
-
-    void syncClose(@Nullable Exception optionalException) {
-        setExceptionAndCloseChannel(optionalException);
     }
 
     public boolean isClosed() {

@@ -13,7 +13,7 @@ import java.nio.channels.ServerSocketChannel;
  * and create {@link RouplexTcpClient}s by wrapping them.
  *
  * Instances of this class are obtained via the builder obtainable in its turn via a call to
- * {@link RouplexTcpBinder#newRouplexTcpServerBuilder()}.
+ * {@link RouplexTcpBroker#newRouplexTcpServerBuilder()}.
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
@@ -28,8 +28,8 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
         protected RouplexTcpServerListener rouplexTcpServerListener;
         protected RouplexTcpClientListener rouplexTcpClientListener;
 
-        Builder(RouplexTcpBinder rouplexTcpBinder) {
-            super(rouplexTcpBinder);
+        Builder(RouplexTcpBroker rouplexTcpBroker) {
+            super(rouplexTcpBroker);
         }
 
         protected void checkCanBuild() {
@@ -149,6 +149,7 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
     final int sendBufferSize;
     final int receiveBufferSize;
     final RouplexTcpServerListener rouplexTcpServerListener;
+    final RouplexTcpClientListener rouplexTcpClientListener;
 
     RouplexTcpServer(Builder builder) throws IOException {
         super(builder);
@@ -156,6 +157,7 @@ public class RouplexTcpServer extends RouplexTcpEndPoint {
         sendBufferSize = builder.sendBufferSize;
         receiveBufferSize = builder.receiveBufferSize;
         rouplexTcpServerListener = builder.rouplexTcpServerListener;
+        rouplexTcpClientListener = builder.rouplexTcpClientListener;
 
         ServerSocketChannel serverSocketChannel = (ServerSocketChannel) selectableChannel;
 

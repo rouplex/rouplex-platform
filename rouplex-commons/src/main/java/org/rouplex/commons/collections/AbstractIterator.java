@@ -7,8 +7,8 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 /**
- * A convenience class providing functionality which is actually present since java-1.8, needed since rouplex targets
- * java-1.6
+ * A convenience class providing functionality which is actually present in jdk-1.8, needed since rouplex targets
+ * jdk-1.6
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */

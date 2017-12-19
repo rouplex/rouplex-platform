@@ -1,5 +1,6 @@
 package org.rouplex.platform.io;
 
+import java.util.UnknownFormatConversionException;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -24,22 +25,21 @@ public abstract class Throttle {
      *          the duration for which the maxRate has to be capped
      * @param timeUnit
      *          the time unit related to the duration parameter
-     * @return
-     *          true if the producer will be honoring this, false otherwise
+     * @throws UnsupportedOperationException
+     *          if this function is not supported by the throttle
      */
-    public boolean setMaxRate(long maxRate, long duration, TimeUnit timeUnit) {
-        return false;
+    public void setMaxRate(long maxRate, long duration, TimeUnit timeUnit) throws UnsupportedOperationException {
+        throw new UnknownFormatConversionException("setMaxRate() is not supported by this throttle");
     }
 
     /**
      * Advise the producer to pause sending data.
      *
-     * @return
-     *          true if the producer will be honoring this. The default implementation returns false since it does
-     *          nothing to pause anything.
+     * @throws UnsupportedOperationException
+     *          if this function is not supported by the throttle
      */
-    public boolean pause() {
-        return false;
+    public void pause() throws UnsupportedOperationException {
+        throw new UnknownFormatConversionException("pause() is not supported by this throttle");
     }
 
     /**
