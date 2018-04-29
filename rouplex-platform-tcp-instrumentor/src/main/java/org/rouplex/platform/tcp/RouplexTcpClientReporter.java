@@ -14,9 +14,9 @@ import java.util.logging.Logger;
 public class RouplexTcpClientReporter {
     private static final Logger logger = Logger.getLogger(RouplexTcpClientReporter.class.getSimpleName());
     public static final String format = "%s.%s:%s::%s:%s";
-    // [RouplexTcpClient,RouplexTcpServer].[Local]:[Port]::[Remote]:[Port]
+    // [TcpClient,TcpServer].[Local]:[Port]::[Remote]:[Port]
 
-    public final RouplexTcpClient rouplexTcpClient;
+    public final TcpClient tcpClient;
     public final AopInstrumentor aopInstrumentor;
 
     public Meter sentBytes;
@@ -33,24 +33,24 @@ public class RouplexTcpClientReporter {
     public String aggregatedId;
     public String completeId;
 
-    public RouplexTcpClientReporter(RouplexTcpClient rouplexTcpClient, AopInstrumentor aopInstrumentor) {
-        this.rouplexTcpClient = rouplexTcpClient;
+    public RouplexTcpClientReporter(TcpClient tcpClient, AopInstrumentor aopInstrumentor) {
+        this.tcpClient = tcpClient;
         this.aopInstrumentor = aopInstrumentor;
 
         try {
-            InetSocketAddress inetSocketAddress = (InetSocketAddress) rouplexTcpClient.getLocalAddress();
+            InetSocketAddress inetSocketAddress = (InetSocketAddress) tcpClient.getLocalAddress();
             String localAddress = inetSocketAddress.getHostName();
             int localPort = inetSocketAddress.getPort();
 
-            inetSocketAddress = (InetSocketAddress) rouplexTcpClient.getRemoteAddress();
+            inetSocketAddress = (InetSocketAddress) tcpClient.getRemoteAddress();
             String remoteAddress = inetSocketAddress.getHostName();
             int remotePort = inetSocketAddress.getPort();
 
             AopConfig aopConfig = aopInstrumentor.aopConfig;
-            String actor = rouplexTcpClient.getRouplexTcpServer() == null ? "RouplexTcpClient" : "RouplexTcpServer";
+            String actor = tcpClient.getOriginatingTcpServer() == null ? "TcpClient" : "TcpServer";
 
             if (aopConfig.useShortFormat) {
-                completeId = rouplexTcpClient.getRouplexTcpServer() == null ? "C:" + localPort + "->S" : "S->C:" + remotePort;
+                completeId = tcpClient.getOriginatingTcpServer() == null ? "C:" + localPort + "->S" : "S->C:" + remotePort;
             } else {
                 completeId = String.format(format, actor, localAddress, localPort, remoteAddress, remotePort);
             }

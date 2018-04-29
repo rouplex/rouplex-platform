@@ -13,9 +13,9 @@ import java.util.logging.Logger;
  */
 public class RouplexTcpSelectorReporter {
     private static final Logger logger = Logger.getLogger(RouplexTcpSelectorReporter.class.getSimpleName());
-    public static final String format = "RouplexTcpSelector.%s"; // [Hash]
+    public static final String format = "TcpSelector.%s"; // [Hash]
 
-    public final RouplexTcpSelector rouplexTcpSelector;
+    public final TcpSelector tcpSelector;
     public final AopInstrumentor aopInstrumentor;
 
     public Meter handleSelectedKey;
@@ -23,8 +23,8 @@ public class RouplexTcpSelectorReporter {
     public String aggregatedId;
     public String completeId;
 
-    public RouplexTcpSelectorReporter(RouplexTcpSelector rouplexTcpSedlector, AopInstrumentor aopInstrumentor) {
-        this.rouplexTcpSelector = rouplexTcpSedlector;
+    public RouplexTcpSelectorReporter(TcpSelector rouplexTcpSedlector, AopInstrumentor aopInstrumentor) {
+        this.tcpSelector = rouplexTcpSedlector;
         this.aopInstrumentor = aopInstrumentor;
 
         updateId();
@@ -39,9 +39,9 @@ public class RouplexTcpSelectorReporter {
     }
 
     private void updateId() {
-        completeId = String.format(format, rouplexTcpSelector.hashCode());
+        completeId = String.format(format, tcpSelector.hashCode());
         aggregatedId = String.format(format,
-            aopInstrumentor.aopConfig.aggregateTcpSelectors ? "A" : rouplexTcpSelector.hashCode());
+            aopInstrumentor.aopConfig.aggregateTcpSelectors ? "A" : tcpSelector.hashCode());
 
         handleSelectedKey = aopInstrumentor.metricRegistry.meter(MetricRegistry.name(aggregatedId, "handleSelectedKey"));
 
@@ -58,7 +58,7 @@ public class RouplexTcpSelectorReporter {
                             int totalKeys = 0;
 
                             try {
-                                for (RouplexTcpSelector tcpSelector : aopInstrumentor.tcpSelectors.keySet()) {
+                                for (TcpSelector tcpSelector : aopInstrumentor.tcpSelectors.keySet()) {
                                    //aaa totalKeys += tcpSelector.selector.keys().size();
                                 }
                             } catch (ConcurrentModificationException cme) {
