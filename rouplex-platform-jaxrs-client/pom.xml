@@ -7,11 +7,11 @@
     <parent>
         <groupId>org.rouplex</groupId>
         <artifactId>rouplex-platform-parent</artifactId>
-        <version>1.0.5-SNAPSHOT</version>
+        <version>1.0.6-SNAPSHOT</version>
     </parent>
 
     <artifactId>rouplex-platform-jaxrs-client</artifactId>
-    <version>1.0.5-SNAPSHOT</version>
+    <version>1.0.6-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <dependencies>
