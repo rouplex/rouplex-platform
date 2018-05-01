@@ -219,8 +219,8 @@ class TcpSelector implements Runnable {
                     for (Map.Entry<TcpEndPoint, Exception> tcpEndPoint : unregisterTcpEndPoints.entrySet()) {
                         try {
                             tcpEndPoint.getKey().handleUnregistration(tcpEndPoint.getValue());
-                        } catch (Exception e) {
-                            tcpEndPoint.getKey().handleUnregistration(e);
+                        } catch (RuntimeException re) {
+                            // nothing to do
                         }
                     }
                 }
