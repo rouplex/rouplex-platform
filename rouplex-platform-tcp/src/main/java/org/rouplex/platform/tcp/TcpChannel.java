@@ -93,6 +93,10 @@ class TcpChannel {
         synchronized (lock) {
             if (this.channelReadyCallback == null) {
                 this.channelReadyCallback = channelReadyCallback;
+
+                if (Thread.currentThread() != tcpClient.brokerThread) {
+                    tcpClient.tcpSelector.asyncUpdateTcpClient(tcpClient);
+                }
             } else {
                 if (channelReadyCallbacks == null) {
                     channelReadyCallbacks = new ArrayList<>();
@@ -100,11 +104,6 @@ class TcpChannel {
 
                 channelReadyCallbacks.add(channelReadyCallback);
             }
-        }
-
-        // Following check is only for performance gain
-        if (Thread.currentThread() != tcpClient.brokerThread) {
-            tcpClient.tcpSelector.asyncUpdateTcpClient(tcpClient);
         }
     }
 

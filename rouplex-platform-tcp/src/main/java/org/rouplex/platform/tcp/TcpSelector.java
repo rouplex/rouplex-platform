@@ -252,15 +252,19 @@ class TcpSelector implements Runnable {
                 int updated = selector.select(selectTimeout);
 
                 if (updated != selector.selectedKeys().size()) {
-                    logger.info(String.format("Assertion failure: updated [%s] != selector.selectedKeys().size() [%s]",
-                        updated, selector.selectedKeys().size()));
+                    if (logger.isLoggable(Level.INFO)) {
+                        logger.info(String.format("Assertion failure: updated [%s] != selector.selectedKeys().size() [%s]",
+                            updated, selector.selectedKeys().size()));
+                    }
                 }
 
                 endSelectionNano = System.nanoTime();
                 timeInsideSelectNano.addAndGet(endSelectionNano - startSelectionNano);
 
-                logger.info(String.format("Selector[%s] TimeIn[%s] TimeOut[%s] Keys[%s] Selected[%s]",
-                    selector, timeInsideSelectNano.get(), timeOutsideSelectNano.get(), selector.keys().size(), updated));
+                if (logger.isLoggable(Level.INFO)) {
+                    logger.info(String.format("Selector[%s] TimeIn[%s] TimeOut[%s] Keys[%s] Selected[%s]",
+                        selector, timeInsideSelectNano.get(), timeOutsideSelectNano.get(), selector.keys().size(), updated));
+                }
 
                 for (SelectionKey selectionKey : selector.selectedKeys()) {
                     handleSelectedKey(selectionKey);
@@ -386,9 +390,7 @@ class TcpSelector implements Runnable {
     }
 
     void handleSelectException(Exception e) {
-        if (logger.isLoggable(Level.INFO)) {
-            logger.severe(String.format("Closed. Reason: %s %s", e.getClass().getSimpleName(), e.getMessage()));
-        }
+        logger.severe(String.format("Closed. Reason: %s %s", e.getClass().getSimpleName(), e.getMessage()));
 
         // AOP wraps this call when debugging and the argument e provides useful info
         tcpBroker.close(); // bubble up the fatal exception by asking the broker to close

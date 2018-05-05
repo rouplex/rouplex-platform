@@ -267,9 +267,12 @@ public class TcpClient extends TcpEndPoint {
     }
 
     void handleRegistration() throws Exception {
+        brokerThread = Thread.currentThread();
+
         if (originatingTcpServer != null) {
             selectionKey = selectableChannel.register(tcpSelector.selector, 0, this);
             handleConnected();
+            handleRemainingUpdates();
         } else {
             selectionKey = selectableChannel.register(tcpSelector.selector, SelectionKey.OP_CONNECT, this);
         }
@@ -279,15 +282,14 @@ public class TcpClient extends TcpEndPoint {
         // In these two blocks, artificially set channelReady for the read or write call to happen and eventually
         // fail (channel shutdown or tcp closed). Notice we do not call out from within synchronized blocks.
         synchronized (tcpWriteChannel.lock) {
-            if (tcpWriteChannel.channelReadyCallback != null && tcpWriteChannel.shutdown) {
+            if (tcpWriteChannel.shutdown) {
                 tcpWriteChannel.channelReady = true;
             }
         }
 
         synchronized (lock) {
             if (closed) {
-                tcpWriteChannel.channelReady |= tcpWriteChannel.channelReadyCallback != null;
-                tcpReadChannel.channelReady = tcpReadChannel.channelReadyCallback != null;
+                tcpWriteChannel.channelReady = tcpReadChannel.channelReady = true;
             }
         }
 
@@ -329,13 +331,13 @@ public class TcpClient extends TcpEndPoint {
 
         if (tcpReadChannel.channelReadyCallback == null) {
             selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_READ);
-        } else if (!tcpReadChannel.channelReady) {
+        } else {
             selectionKey.interestOps(selectionKey.interestOps() | SelectionKey.OP_READ);
         }
 
         if (tcpWriteChannel.channelReadyCallback == null) {
             selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_WRITE);
-        } else if (!tcpWriteChannel.channelReady) {
+        } else {
             selectionKey.interestOps(selectionKey.interestOps() | SelectionKey.OP_WRITE);
         }
     }
@@ -390,7 +392,7 @@ public class TcpClient extends TcpEndPoint {
                     tcpClientLifecycleListener.onConnectionFailed(this, ioException);
                 }
             }
-        } catch (RuntimeException e) {
+        } catch (RuntimeException re) {
             // RuntimeException (from client handling notification)
         }
     }
