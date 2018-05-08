@@ -46,6 +46,13 @@
             <artifactId>rouplex-platform</artifactId>
         </dependency>
 
+        <!-- Use Yammer for metrics injection and exposing via JMX -->
+        <dependency>
+            <groupId>io.dropwizard.metrics</groupId>
+            <artifactId>metrics-core</artifactId>
+            <version>3.1.0</version>
+        </dependency>
+
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>

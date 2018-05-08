@@ -23,6 +23,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class TcpBroker implements Closeable {
     private final TcpSelector[] tcpSelectors;
     private final AtomicInteger tcpSelectorIndex = new AtomicInteger();
+    public final TcpMetrics tcpMetrics = new TcpMetrics();
+
     private boolean closed;
     private Exception fatalException;
 

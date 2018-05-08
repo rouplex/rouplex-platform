@@ -7,7 +7,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -129,11 +129,11 @@ class TcpSelector implements Runnable {
         selector.wakeup();
     }
 
-    AtomicLong timeInsideSelectNano = new AtomicLong();
-    AtomicLong timeOutsideSelectNano = new AtomicLong();
-
     @Override
     public void run() {
+        long timeInsideSelectNano = 0;
+        long timeOutsideSelectNano = 0;
+
         try {
             long startSelectionNano = System.nanoTime();
             long endSelectionNano = startSelectionNano;
@@ -246,10 +246,17 @@ class TcpSelector implements Runnable {
                 }
 
                 startSelectionNano = System.nanoTime();
-                timeOutsideSelectNano.addAndGet(startSelectionNano - endSelectionNano);
+                timeOutsideSelectNano += startSelectionNano - endSelectionNano;
+                tcpBroker.tcpMetrics.timeOutsideSelectNano.update(startSelectionNano - endSelectionNano, TimeUnit.NANOSECONDS);
 
                 selector.selectedKeys().clear();
                 int updated = selector.select(selectTimeout);
+
+                endSelectionNano = System.nanoTime();
+                timeInsideSelectNano += endSelectionNano - startSelectionNano;
+                tcpBroker.tcpMetrics.timeInsideSelectNano.update(endSelectionNano - startSelectionNano, TimeUnit.NANOSECONDS);
+
+                tcpBroker.tcpMetrics.selectedKeysCounts.update(updated);
 
                 if (updated != selector.selectedKeys().size()) {
                     if (logger.isLoggable(Level.INFO)) {
@@ -258,12 +265,9 @@ class TcpSelector implements Runnable {
                     }
                 }
 
-                endSelectionNano = System.nanoTime();
-                timeInsideSelectNano.addAndGet(endSelectionNano - startSelectionNano);
-
                 if (logger.isLoggable(Level.INFO)) {
                     logger.info(String.format("Selector[%s] TimeIn[%s] TimeOut[%s] Keys[%s] Selected[%s]",
-                        selector, timeInsideSelectNano.get(), timeOutsideSelectNano.get(), selector.keys().size(), updated));
+                        selector, timeInsideSelectNano, timeOutsideSelectNano, selector.keys().size(), updated));
                 }
 
                 for (SelectionKey selectionKey : selector.selectedKeys()) {
