@@ -8,7 +8,7 @@ import java.util.concurrent.TimeUnit;
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class TcpMetrics {
-    public final MetricRegistry tcpBrokerMetrics = new MetricRegistry();
+    public final MetricRegistry tcpReactorMetrics = new MetricRegistry();
 
     public final Counter syncAddTcpRWClientsCount;
     public final Counter asyncAddTcpRWClientsCount;
@@ -18,17 +18,17 @@ public class TcpMetrics {
     public final Timer timeOutsideSelectNano;
 
     public TcpMetrics() {
-        JmxReporter.forRegistry(tcpBrokerMetrics)
+        JmxReporter.forRegistry(tcpReactorMetrics)
             .convertRatesTo(TimeUnit.SECONDS)
             .convertDurationsTo(TimeUnit.MILLISECONDS)
             .inDomain("TcpReactor")
             .build().start();
 
-        syncAddTcpRWClientsCount = tcpBrokerMetrics.counter("syncAddTcpRWClientsCount");
-        asyncAddTcpRWClientsCount = tcpBrokerMetrics.counter("asyncAddTcpRWClientsCount");
-        interestOpsCount = tcpBrokerMetrics.counter("interestOpsCount");
-        selectedKeysBuckets = tcpBrokerMetrics.histogram("selectedKeysBuckets");
-        timeInsideSelectNano = tcpBrokerMetrics.timer("timeInsideSelectNano");
-        timeOutsideSelectNano = tcpBrokerMetrics.timer("timeOutsideSelectNano");
+        syncAddTcpRWClientsCount = tcpReactorMetrics.counter("syncAddTcpRWClientsCount");
+        asyncAddTcpRWClientsCount = tcpReactorMetrics.counter("asyncAddTcpRWClientsCount");
+        interestOpsCount = tcpReactorMetrics.counter("interestOpsCount");
+        selectedKeysBuckets = tcpReactorMetrics.histogram("selectedKeysBuckets");
+        timeInsideSelectNano = tcpReactorMetrics.timer("timeInsideSelectNano");
+        timeOutsideSelectNano = tcpReactorMetrics.timer("timeOutsideSelectNano");
     }
 }
