@@ -32,15 +32,11 @@ public class TcpWriteChannel extends TcpChannel {
             }
 
             if (timeoutMillis == -1) {
-                int written = socketChannel.write(byteBuffer);
-
-                // spare a comparison, it's ok to allow non broker threads update this state
-                channelReady = written != 0;
-                return written;
+                return socketChannel.write(byteBuffer);
             }
 
-            // Can't hold broker thread for too long, since we would be penalising other clients of the broker
-            if (tcpClient.brokerThread == Thread.currentThread()) {
+            // Can't hold broker tcpSelectorThread for too long, since we would be penalising other clients of the broker
+            if (tcpClient.tcpSelector.tcpSelectorThread == Thread.currentThread()) {
                 throw new IOException("Channel cannot perform blocking writes from broker thread");
             }
 
@@ -70,14 +66,19 @@ public class TcpWriteChannel extends TcpChannel {
         }
     }
 
+    @Override
+    void asyncAddChannelReadyCallback(Runnable channelReadyCallback) throws IOException {
+        tcpSelector.asyncAddTcpWriteChannel(tcpClient, channelReadyCallback);
+    }
+
     public void shutdown() throws IOException {
         synchronized (lock) {
             if (shutdown) {
-                throw new IOException("Channel cannot perform writes after shutdown");
+                return;
             }
 
             if (currentByteBuffer != null) {
-                throw new IOException("Channel cannot perform concurrent writes");
+                throw new IOException("Channel cannot be shutdown during ongoing write");
             }
 
             shutdown = true;

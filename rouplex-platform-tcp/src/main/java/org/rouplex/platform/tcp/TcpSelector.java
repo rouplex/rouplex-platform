@@ -4,24 +4,20 @@ import org.rouplex.commons.annotations.GuardedBy;
 import org.rouplex.commons.annotations.Nullable;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.util.*;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
  * Internal class, not to be accessed directly by the user. It performs tasks related to registering and unregistering
- * channels with the selector that it owns, selecting on those channels and handling the ready ops by performing them,
- * then invoking the appropriate handlers to perform the rest of the handling.
- * <p/>
- * For example, it will perform a {@link SocketChannel#finishConnect()} when it notices the channel is connectable,
- * and if successful will call the related client's connected(..) event; or it will perform a
- * {@link SocketChannel#read(ByteBuffer)} when it notices the channel is readable, then invoke the appropriate client's
- * throttled receiver to handle the received data and so on with the write.
- * <p/>
- * The number of instances of this class will be usually related to the number of the CPU's available in the host.
+ * channels with the nio selector that it owns, selecting on those channels and forwarding read-ready and write-ready
+ * notifications towards the respective channels for user processing.
+ *
+ * The number of instances of this class will be usually related to the number of the CPU's available in the host, but
+ * it is controlled indirectly by threadCount argument in one of {@link TcpReactor} constructors.
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
@@ -29,23 +25,38 @@ class TcpSelector implements Runnable {
     private static final Logger logger = Logger.getLogger(TcpSelector.class.getSimpleName());
     private final Object lock = new Object();
 
-    private final TcpBroker tcpBroker;
+    final TcpReactor tcpReactor;
     final Selector selector;
+    final Thread tcpSelectorThread;
 
     @GuardedBy("lock")
-    private List<TcpEndPoint> registeringTcpEndPoints = new ArrayList<TcpEndPoint>();
+    private List<TcpEndPoint> asyncRegisterTcpEndPoints = new ArrayList<TcpEndPoint>();
     @GuardedBy("lock")
-    private Map<TcpEndPoint, Exception> unregisteringTcpEndPoints = new HashMap<TcpEndPoint, Exception>();
+    private Map<TcpEndPoint, Exception> asyncUnregisterTcpEndPoints = new HashMap<TcpEndPoint, Exception>();
     @GuardedBy("lock")
-    private List<TcpClient> updatingTcpClients = new ArrayList<TcpClient>();
+    private List<TcpClient> asyncAddTcpReadClients = new ArrayList<TcpClient>();
     @GuardedBy("lock")
+    private List<Runnable> asyncAddTcpReadCallbacks = new ArrayList<Runnable>();
+    @GuardedBy("lock")
+    private List<TcpClient> asyncAddTcpWriteClients = new ArrayList<TcpClient>();
+    @GuardedBy("lock")
+    private List<Runnable> asyncAddTcpWriteCallbacks = new ArrayList<Runnable>();
+
+    @GuardedBy("no-need-guarding")
+    final Set<TcpClient> syncAddTcpRWClients = new HashSet<>();
+
+    @GuardedBy("lock") // Most likely will go away
     private List<PendingOps> pausingInterestOps = new ArrayList<PendingOps>();
-    @GuardedBy("lock")
+    @GuardedBy("lock") // Most likely will go away
     private List<PendingOps> resumingInterestOps = new ArrayList<PendingOps>();
-
+    // Most likely will go away
     private final SortedMap<Long, List<PendingOps>> resumingLaterInterestOps = new TreeMap<Long, List<PendingOps>>();
+
     private boolean closed;
     private Exception fatalException;
+
+    // TODO better via a a (linked) array
+    List<TcpClient> tcpClientsUpdated = new ArrayList<>();
 
     private class PendingOps {
         final SelectionKey selectionKey;
@@ -67,66 +78,204 @@ class TcpSelector implements Runnable {
         }
     }
 
-    TcpSelector(TcpBroker tcpBroker, Selector selector) {
-        this.tcpBroker = tcpBroker;
+    TcpSelector(TcpReactor tcpReactor, Selector selector, ThreadFactory threadFactory, String threadName) {
+        this.tcpReactor = tcpReactor;
         this.selector = selector;
+
+        tcpSelectorThread = threadFactory.newThread(this);
+        tcpSelectorThread.setDaemon(true);
+        tcpSelectorThread.setName(threadName);
+        tcpSelectorThread.start();
     }
 
     /**
      * Add the endpoint to be registered on next cycle of selector. We merely keep a reference on it, and wakeup the
-     * background thread which is tasked with selecting as well as registering new / unregistering old endpoints.
+     * background tcpSelectorThread which is tasked with selecting as well as registering new / unregistering old endpoints.
      *
-     * @param tcpEndPoint the endpoint to be added for selection inside the main loop
-     * @throws IOException if the instance has already been closed
+     * @param tcpEndPoint
+     *          The endpoint to be added for selection inside the main loop
+     * @throws
+     *          IOException if the instance has already been closed
      */
     void asyncRegisterTcpEndPoint(TcpEndPoint tcpEndPoint) throws IOException {
         synchronized (lock) {
             if (closed) {
-                throw new IOException("TcpSelector already closed.");
+                throw new IOException("TcpReactor already closed.");
             }
 
-            registeringTcpEndPoints.add(tcpEndPoint);
+            asyncRegisterTcpEndPoints.add(tcpEndPoint);
         }
 
         selector.wakeup();
     }
 
-    /**
-     * Add a endpoint whose interestOps need to be updated on next cycle of selector. We merely keep a reference on it,
-     * and wakeup the selector which will call the tcpEndpoint to update the corresponding selectionKey.
-     *
-     * @param tcpClient the tcpClient whose interestOps will be updated on next cycle of selector
-     * @throws IOException if the instance has already been closed
-     */
-    void asyncUpdateTcpClient(TcpClient tcpClient) throws IOException {
+    void asyncAddTcpReadChannel(TcpClient tcpClient, Runnable channelReadyCallback) throws IOException {
         synchronized (lock) {
             if (closed) {
-                throw new IOException("TcpSelector already closed.");
+                throw new IOException("TcpReactor already closed.");
             }
 
-            updatingTcpClients.add(tcpClient);
+            asyncAddTcpReadClients.add(tcpClient);
+            asyncAddTcpReadCallbacks.add(channelReadyCallback);
+        }
+
+        selector.wakeup();
+    }
+
+    void asyncAddTcpWriteChannel(TcpClient tcpClient, Runnable channelReadyCallback) throws IOException {
+        synchronized (lock) {
+            if (closed) {
+                throw new IOException("TcpReactor already closed.");
+            }
+
+            asyncAddTcpWriteClients.add(tcpClient);
+            asyncAddTcpWriteCallbacks.add(channelReadyCallback);
         }
 
         selector.wakeup();
     }
 
     /**
-     * For channels that closed and need to report via binder. Add the tcpEndPoint to be unregistered on next cycle of
+     * For channels that closed and need to report via selector. Add the tcpEndPoint to be unregistered on next cycle of
      * selector.
      *
-     * @param tcpEndPoint    the endpoint that needs to be unregistered
-     * @param optionalReason if there was an exception which resulted in the endpoint being closed, null otherwise
+     * @param tcpEndPoint
+     *          The endpoint that needs to be unregistered
+     * @param optionalReason
+     *          If there was an exception which resulted in the endpoint being closed, null otherwise
      */
     void asyncUnregisterTcpEndPoint(TcpEndPoint tcpEndPoint, Exception optionalReason) throws IOException {
         synchronized (lock) {
             if (closed) {
-                throw new IOException("TcpSelector already closed.");
+                throw new IOException("TcpReactor already closed.");
             }
 
-            unregisteringTcpEndPoints.put(tcpEndPoint, optionalReason);
+            asyncUnregisterTcpEndPoints.put(tcpEndPoint, optionalReason);
         }
 
         selector.wakeup();
+    }
+
+    boolean processAccumulatedAsyncRequests() {
+        List<TcpEndPoint> registerTcpEndPoints = new ArrayList<TcpEndPoint>();
+        Map<TcpEndPoint, Exception> unregisterTcpEndPoints = new HashMap<TcpEndPoint, Exception>();
+
+        List<TcpClient> addTcpReadClients;
+        List<Runnable> addTcpReadCallbacks = null;
+        List<TcpClient> addTcpWriteClients;
+        List<Runnable> addTcpWriteCallbacks = null;
+
+        synchronized (lock) {
+            if (closed) {
+                return false;
+            }
+
+            if (!asyncRegisterTcpEndPoints.isEmpty()) {
+                registerTcpEndPoints = asyncRegisterTcpEndPoints;
+                asyncRegisterTcpEndPoints = new ArrayList<TcpEndPoint>();
+            } else {
+                registerTcpEndPoints = null;
+            }
+
+            if (!asyncAddTcpReadClients.isEmpty()) {
+                addTcpReadClients = asyncAddTcpReadClients;
+                asyncAddTcpReadClients = new ArrayList<TcpClient>();
+                addTcpReadCallbacks = asyncAddTcpReadCallbacks;
+                asyncAddTcpReadCallbacks = new ArrayList<Runnable>();
+            } else {
+                addTcpReadClients = null;
+            }
+
+            if (!asyncAddTcpWriteClients.isEmpty()) {
+                addTcpWriteClients = asyncAddTcpWriteClients;
+                asyncAddTcpWriteClients = new ArrayList<TcpClient>();
+                addTcpWriteCallbacks = asyncAddTcpWriteCallbacks;
+                asyncAddTcpWriteCallbacks = new ArrayList<Runnable>();
+            } else {
+                addTcpWriteClients = null;
+            }
+
+            if (!asyncUnregisterTcpEndPoints.isEmpty()) {
+                unregisterTcpEndPoints = asyncUnregisterTcpEndPoints;
+                asyncUnregisterTcpEndPoints = new HashMap<TcpEndPoint, Exception>();
+            } else {
+                unregisterTcpEndPoints = null;
+            }
+
+            if (!pausingInterestOps.isEmpty()) {
+                for (PendingOps pausingOps : pausingInterestOps) {
+                    pauseInterestOps(pausingOps);
+                }
+
+                pausingInterestOps = new ArrayList<PendingOps>();
+            }
+
+            if (!resumingInterestOps.isEmpty()) {
+                for (PendingOps resumingOps : resumingInterestOps) {
+                    try {
+                        resumingOps.enablePendingOps();
+                    } catch (CancelledKeyException cke) {
+                        // key will be removed from selector on next select
+                    }
+                }
+
+                resumingInterestOps = new ArrayList<PendingOps>();
+            }
+        }
+
+        // Fire only lock-free events towards client! In this particular case, only "connected" event
+        // for to an accepted TcpClient can be fired, and without any side effects
+        if (registerTcpEndPoints != null) {
+            for (TcpEndPoint tcpEndPoint : registerTcpEndPoints) {
+                try {
+                    tcpEndPoint.handleRegistration();
+                } catch (Exception e) {
+                    tcpEndPoint.handleUnregistration(e);
+                }
+            }
+        }
+
+        tcpClientsUpdated.clear();
+
+        // fire only lock-free events towards client! We may end up firing "ReadReady" after a TcpClient
+        // gets closed, but the event is valid in that case as well (since we cannot leave registered
+        // callbacks hanging anyway)
+        if (addTcpReadClients != null) {
+            int index = 0;
+            for (TcpClient tcpClient : addTcpReadClients) {
+                try {
+                    tcpClientsUpdated.add(tcpClient);
+                    tcpClient.tcpReadChannel.addChannelReadyCallback(addTcpReadCallbacks.get(index++));
+                } catch (Exception e) {
+                    tcpClient.handleUnregistration(e);
+                }
+            }
+        }
+
+        // fire only lock-free events towards client! Same as ReadReady scenario.
+        if (addTcpWriteClients != null) {
+            int index = 0;
+            for (TcpClient tcpClient : addTcpWriteClients) {
+                try {
+                    tcpClientsUpdated.add(tcpClient);
+                    tcpClient.tcpWriteChannel.addChannelReadyCallback(addTcpWriteCallbacks.get(index++));
+                } catch (Exception e) {
+                    tcpClient.handleUnregistration(e);
+                }
+            }
+        }
+
+        if (unregisterTcpEndPoints != null) {
+            for (Map.Entry<TcpEndPoint, Exception> tcpEndPoint : unregisterTcpEndPoints.entrySet()) {
+                try {
+                    tcpEndPoint.getKey().handleUnregistration(tcpEndPoint.getValue());
+                } catch (RuntimeException re) {
+                    // nothing to do
+                }
+            }
+        }
+
+        return true;
     }
 
     @Override
@@ -140,89 +289,9 @@ class TcpSelector implements Runnable {
 
             while (true) {
                 long now = System.currentTimeMillis();
-                List<TcpEndPoint> registerTcpEndPoints;
-                List<TcpClient> updateTcpClients;
-                Map<TcpEndPoint, Exception> unregisterTcpEndPoints;
 
-                synchronized (lock) {
-                    if (closed) {
-                        break;
-                    }
-
-                    if (registeringTcpEndPoints.isEmpty()) {
-                        registerTcpEndPoints = null;
-                    } else {
-                        registerTcpEndPoints = registeringTcpEndPoints;
-                        registeringTcpEndPoints = new ArrayList<TcpEndPoint>();
-                    }
-
-                    if (updatingTcpClients.isEmpty()) {
-                        updateTcpClients = null;
-                    } else {
-                        updateTcpClients = updatingTcpClients;
-                        updatingTcpClients = new ArrayList<TcpClient>();
-                    }
-
-                    if (unregisteringTcpEndPoints.isEmpty()) {
-                        unregisterTcpEndPoints = null;
-                    } else {
-                        unregisterTcpEndPoints = unregisteringTcpEndPoints;
-                        unregisteringTcpEndPoints = new HashMap<TcpEndPoint, Exception>();
-                    }
-
-                    if (!pausingInterestOps.isEmpty()) {
-                        for (PendingOps pausingOps : pausingInterestOps) {
-                            pauseInterestOps(pausingOps);
-                        }
-
-                        pausingInterestOps = new ArrayList<PendingOps>();
-                    }
-
-                    if (!resumingInterestOps.isEmpty()) {
-                        for (PendingOps resumingOps : resumingInterestOps) {
-                            try {
-                                resumingOps.enablePendingOps();
-                            } catch (CancelledKeyException cke) {
-                                // key will be removed from selector on next select
-                            }
-                        }
-
-                        resumingInterestOps = new ArrayList<PendingOps>();
-                    }
-                }
-
-                if (registerTcpEndPoints != null) {
-                    // fire only lock-free events towards client! The trade off is that a new channel may fire
-                    // after a close() call, but that same channel will be closed shortly after anyway
-                    for (TcpEndPoint tcpEndPoint : registerTcpEndPoints) {
-                        try {
-                            tcpEndPoint.handleRegistration();
-                        } catch (Exception e) {
-                            tcpEndPoint.handleUnregistration(e);
-                        }
-                    }
-                }
-
-                if (updateTcpClients != null) {
-                    // fire only lock-free events towards client! The trade off is that a new channel may fire
-                    // after a close() call, but that same channel will be closed shortly after anyway
-                    for (TcpClient tcpClient : updateTcpClients) {
-                        try {
-                            tcpClient.handlePreSelectUpdates();
-                        } catch (Exception e) {
-                            tcpClient.handleUnregistration(e);
-                        }
-                    }
-                }
-
-                if (unregisterTcpEndPoints != null) {
-                    for (Map.Entry<TcpEndPoint, Exception> tcpEndPoint : unregisterTcpEndPoints.entrySet()) {
-                        try {
-                            tcpEndPoint.getKey().handleUnregistration(tcpEndPoint.getValue());
-                        } catch (RuntimeException re) {
-                            // nothing to do
-                        }
-                    }
+                if (!processAccumulatedAsyncRequests()) {
+                    return; // closed
                 }
 
                 long selectTimeout = 0;
@@ -245,18 +314,43 @@ class TcpSelector implements Runnable {
                     iterator.remove();
                 }
 
+                // Cache since it will be used inside multiple loops
+                Set<SelectionKey> selectedKeys = selector.selectedKeys();
+
+                tcpReactor.tcpMetrics.asyncAddTcpRWClientsCount.inc(tcpClientsUpdated.size());
+                // clients that have received RW interests asynchronously
+                for (TcpClient tcpClient : tcpClientsUpdated) {
+                    tcpClient.updateInterestOps();
+                    selectedKeys.remove(tcpClient.selectionKey);
+                }
+
+                tcpReactor.tcpMetrics.syncAddTcpRWClientsCount.inc(syncAddTcpRWClients.size());
+                // clients that have received RW interests synchronously during events fired further up
+                Iterator<TcpClient> syncRegisterTcpRWClientsIter = syncAddTcpRWClients.iterator();
+                while (syncRegisterTcpRWClientsIter.hasNext()) {
+                    TcpClient tcpClient = syncRegisterTcpRWClientsIter.next();
+                    tcpClient.updateInterestOps();
+                    selectedKeys.remove(tcpClient.selectionKey);
+                    syncRegisterTcpRWClientsIter.remove();
+                }
+
+                Iterator<SelectionKey> selectionKeyIterator = selectedKeys.iterator();
+                while (selectionKeyIterator.hasNext()) {
+                    ((TcpClient) selectionKeyIterator.next().attachment()).updateInterestOps();
+                    selectionKeyIterator.remove();
+                }
+
                 startSelectionNano = System.nanoTime();
                 timeOutsideSelectNano += startSelectionNano - endSelectionNano;
-                tcpBroker.tcpMetrics.timeOutsideSelectNano.update(startSelectionNano - endSelectionNano, TimeUnit.NANOSECONDS);
+                tcpReactor.tcpMetrics.timeOutsideSelectNano.update(startSelectionNano - endSelectionNano, TimeUnit.NANOSECONDS);
 
-                selector.selectedKeys().clear();
                 int updated = selector.select(selectTimeout);
 
                 endSelectionNano = System.nanoTime();
                 timeInsideSelectNano += endSelectionNano - startSelectionNano;
-                tcpBroker.tcpMetrics.timeInsideSelectNano.update(endSelectionNano - startSelectionNano, TimeUnit.NANOSECONDS);
+                tcpReactor.tcpMetrics.timeInsideSelectNano.update(endSelectionNano - startSelectionNano, TimeUnit.NANOSECONDS);
 
-                tcpBroker.tcpMetrics.selectedKeysCounts.update(updated);
+                tcpReactor.tcpMetrics.selectedKeysBuckets.update(updated);
 
                 if (updated != selector.selectedKeys().size()) {
                     if (logger.isLoggable(Level.INFO)) {
@@ -270,8 +364,36 @@ class TcpSelector implements Runnable {
                         selector, timeInsideSelectNano, timeOutsideSelectNano, selector.keys().size(), updated));
                 }
 
-                for (SelectionKey selectionKey : selector.selectedKeys()) {
-                    handleSelectedKey(selectionKey);
+                Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
+                while (iterator.hasNext()) {
+                    SelectionKey selectionKey = iterator.next();
+
+                    try {
+                        if (selectionKey.isAcceptable()) {
+                            SocketChannel socketChannel = ((ServerSocketChannel) selectionKey.channel()).accept();
+                            socketChannel.configureBlocking(false);
+                            TcpSelector tcpSelector = tcpReactor.nextTcpSelector();
+
+                            // asyncRegisterTcpEndPoint (and not registerTcpEndPoint) b/c tcpSelector could be a different selector
+                            tcpSelector.asyncRegisterTcpEndPoint(
+                                new TcpClient(socketChannel, tcpSelector, (TcpServer) selectionKey.attachment()));
+
+                            iterator.remove();
+                            continue;
+                        }
+
+                        TcpClient tcpClient = (TcpClient) selectionKey.attachment();
+
+                        if (logger.isLoggable(Level.INFO)) {
+                            logger.info(String.format("Selection for actor[%s] readyOps: [%s]",
+                                tcpClient.getDebugId(), selectionKey.readyOps()));
+                        }
+
+                        tcpClient.handleOpsReady();
+                    } catch (Exception e) {
+                        // ClosedChannelException | IllegalBlockingModeException | RuntimeException from handle/Connected()/Bound()
+                        ((TcpClient) selectionKey.attachment()).handleUnregistration(e);
+                    }
                 }
             }
         } catch (Exception e) {
@@ -281,41 +403,7 @@ class TcpSelector implements Runnable {
         syncClose(); // close synchronously.
     }
 
-    void handleSelectedKey(SelectionKey selectionKey) {
-        try {
-            if (selectionKey.isAcceptable()) {
-                SocketChannel socketChannel = ((ServerSocketChannel) selectionKey.channel()).accept();
-                socketChannel.configureBlocking(false);
-                TcpSelector tcpSelector = tcpBroker.nextTcpSelector();
-
-                // asyncRegisterTcpEndPoint (and not registerTcpEndPoint) b/c tcpSelector is a different selector
-                tcpSelector.asyncRegisterTcpEndPoint(
-                    new TcpClient(socketChannel, tcpSelector, (TcpServer) selectionKey.attachment()));
-
-                return;
-            }
-
-            TcpClient tcpClient = (TcpClient) selectionKey.attachment();
-
-            if (logger.isLoggable(Level.INFO)) {
-                logger.info(String.format("Selection for actor[%s] readyOps: [%s]",
-                    tcpClient.getDebugId(), selectionKey.readyOps()));
-            }
-
-            try {
-                tcpClient.handlePostSelectUpdates();
-            } catch (Exception e) {
-                // ClosedChannelException | IllegalBlockingModeException | RuntimeException from handle/Connected()/Bound()
-                tcpClient.handleUnregistration(e);
-            }
-        } catch (Exception e) {
-            handleSelectedKeyException(e);
-            // Normally we should check selectionKey.isValid() before any access, and since all ops
-            // are synchronous, the condition would hold between various instructions. It is easier
-            // to just catch here and loop to next key though since the try/catch is needed anyways
-        }
-    }
-
+    // Most likely will go away
     private void pauseInterestOps(PendingOps pausingOps) {
         try {
             pausingOps.disablePendingOps();
@@ -336,12 +424,13 @@ class TcpSelector implements Runnable {
 
     /**
      * Remove interest ops for the selection key and add them back later (or never). This call will queue the request
-     * to remove the interestOps then wakeup the selector so that the service thread can perform the update
+     * to remove the interestOps then wakeup the selector so that the service tcpSelectorThread can perform the update
      * synchronously on next cycle; the selector will be instructed to select for the remainder of the time (or less),
      * and will be adding the interest ops back, then remove the entry from the queue.
      *
      * @param selectionKey the key for which we need the new interest ops
      */
+    // Most likely will go away
     void asyncPauseInterestOps(SelectionKey selectionKey, int interestOps, long resumeTimestamp) {
         synchronized (lock) {
             try {
@@ -356,12 +445,13 @@ class TcpSelector implements Runnable {
 
     /**
      * Remove interest ops for the selection key and add them back later (or never). This call will queue the request
-     * to remove the interestOps then wakeup the selector so that the service thread can perform the update
+     * to remove the interestOps then wakeup the selector so that the service tcpSelectorThread can perform the update
      * synchronously on next cycle; the selector will be instructed to select for the remainder of the time (or less),
      * and will be adding the interest ops back, then remove the entry from the queue.
      *
      * @param selectionKey the key for which we need the new interest ops
      */
+    // Most likely will go away
     void asyncResumeInterestOps(SelectionKey selectionKey, int interestOps) {
         synchronized (lock) {
             try {
@@ -394,22 +484,22 @@ class TcpSelector implements Runnable {
     }
 
     void handleSelectException(Exception e) {
-        logger.severe(String.format("Closed. Reason: %s %s", e.getClass().getSimpleName(), e.getMessage()));
+        logger.severe(String.format("Exception: %s %s", e.getClass().getSimpleName(), e.getMessage()));
 
         // AOP wraps this call when debugging and the argument e provides useful info
-        tcpBroker.close(); // bubble up the fatal exception by asking the broker to close
+        tcpReactor.close(); // bubble up the fatal exception by asking the broker to close
     }
 
     /**
      * The component is already in closed state, with no way to pass any exceptions to its user. That's why we silence
-     * all exceptions here. Always called by the same thread, servicing this instance.
+     * all exceptions here. Always called by the same tcpSelectorThread, servicing this instance.
      */
     private void syncClose() {
         for (SelectionKey selectionKey : selector.keys()) {
             ((TcpEndPoint) selectionKey.attachment()).setExceptionAndCloseChannel(fatalException);
         }
 
-        for (TcpEndPoint tcpEndPoint : registeringTcpEndPoints) {
+        for (TcpEndPoint tcpEndPoint : asyncRegisterTcpEndPoints) {
             tcpEndPoint.setExceptionAndCloseChannel(fatalException);
         }
 

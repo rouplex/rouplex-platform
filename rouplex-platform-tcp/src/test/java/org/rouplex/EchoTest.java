@@ -1,6 +1,6 @@
 package org.rouplex;
 
-import org.rouplex.platform.tcp.TcpBroker;
+import org.rouplex.platform.tcp.TcpReactor;
 import org.rouplex.platform.tcp.TcpClient;
 import org.rouplex.platform.tcp.TcpClientLifecycleListener;
 
@@ -9,6 +9,32 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
+ * A simple manual verification with a number of clients sending just a line of text
+ * to a server, which echoes it back in return.
+ *
+ * Simple verify that the sequence of events is of form (session number may be different from 0):
+
+ TcpClient:0 connected
+ TcpClient:0 sending [Hello from TcpClient:0]
+ TcpClient:0 sent [Hello from TcpClient:0]
+ TcpClient:0 shutting down
+ TcpClient:0 shutdown
+ TcpClient:0 received [Hello from TcpClient:0]
+ TcpClient:0 received eos
+ TcpClient:0 closing
+ TcpClient:0 closed
+ TcpClient:0 disconnected
+
+ TcpSession:0 connected
+ TcpSession:0 received [Hello from TcpClient:0]
+ TcpSession:0 sending [Hello from TcpClient:0]
+ TcpSession:0 sent [Hello from TcpClient:0]
+ TcpSession:0 received eos
+ TcpSession:0 closing
+ TcpSession:0 closed
+ TcpSession:0 disconnected
+
+ *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class EchoTest {
@@ -21,10 +47,10 @@ public class EchoTest {
     }
 
     public static void main(String[] args) throws Exception {
-        TcpBroker tcpBroker = new TcpBroker();
+        TcpReactor tcpReactor = new TcpReactor();
         AtomicInteger sessionId = new AtomicInteger();
 
-        tcpBroker.newTcpServerBuilder()
+        tcpReactor.newTcpServerBuilder()
             .withLocalAddress("localhost", 7777)
             .withTcpClientLifecycleListener(new TcpClientLifecycleListener() {
                 @Override
@@ -47,7 +73,7 @@ public class EchoTest {
             .build().bind();
 
         for (int i = 0; i < 10; i++) {
-            TcpClient tcpClient = tcpBroker.newTcpClientBuilder()
+            TcpClient tcpClient = tcpReactor.newTcpClientBuilder()
                 .withRemoteAddress("localhost", 7777)
                 .withTcpClientLifecycleListener(new TcpClientLifecycleListener() {
                     @Override

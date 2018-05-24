@@ -6,6 +6,9 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.nio.channels.Selector;
 import java.nio.channels.spi.SelectorProvider;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -13,55 +16,65 @@ import java.util.concurrent.atomic.AtomicInteger;
  * The starting place for configuring and creating tcp endpoints, an instance of this class provides the builders for
  * {@link TcpClient} and {@link TcpServer} instances.
  *
- * Multiple {@link TcpSelector} are used internally, each performing channel selections on a subset of the
+ * Multiple {@link TcpSelector} instances are used internally, each performing channel selections on a subset of the
  * endpoints for maximum use of processing resources. The suggested usage is to create just one instance of this class,
- * then subsequently create all tcp clients or servers starting from that instance. Though not necessary, more than one
- * instance of this class can be created, for example if you must use more than one {@link SelectorProvider}.
+ * then subsequently create all tcp clients or servers starting from there. Though not necessary, more than one instance
+ * of this class can be created, for example if you must use more than one {@link SelectorProvider}.
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class TcpBroker implements Closeable {
+public class TcpReactor implements Closeable {
     private final TcpSelector[] tcpSelectors;
+    final Set<Thread> tcpSelectorThreads = new HashSet<Thread>();
     private final AtomicInteger tcpSelectorIndex = new AtomicInteger();
     public final TcpMetrics tcpMetrics = new TcpMetrics();
 
     private boolean closed;
     private Exception fatalException;
 
-    public TcpBroker() throws IOException {
+    public TcpReactor() throws IOException {
         this(SelectorProvider.provider());
+    }
+
+    public TcpReactor(SelectorProvider selectorProvider) throws IOException {
+        this(selectorProvider, Runtime.getRuntime().availableProcessors(), Executors.defaultThreadFactory());
     }
 
     /**
      * Construct an instance using the specified {@link SelectorProvider}, {@link ThreadFactory} and read buffer size.
      *
      * @param selectorProvider
-     *          the provider to be used to create the {@link Selector} instances. Expect it to be called once per cpu
+     *          The provider to be used to create the {@link Selector} instances. Expect it to be called once per cpu
      *          core available.
      * @throws IOException
-     *          if the instance could not be created, due to to a problem creating the selector or similar
+     *          If the instance could not be created, due to to a problem creating the selector or similar
      */
-    public TcpBroker(SelectorProvider selectorProvider) throws IOException {
-        tcpSelectors = new TcpSelector[Runtime.getRuntime().availableProcessors()];
+    public TcpReactor(SelectorProvider selectorProvider, int threadCount, ThreadFactory threadFactory) throws IOException {
+        if (threadCount <= 0) {
+            throw new IllegalArgumentException("ThreadCount must be a positive value");
+        }
+
+        tcpSelectors = new TcpSelector[threadCount];
         for (int index = 0; index < tcpSelectors.length; index++) {
-            tcpSelectors[index] = new TcpSelector(this, selectorProvider.openSelector());
-            Thread thread = new Thread(tcpSelectors[index]);
-            thread.setDaemon(true);
-            thread.setName("TcpBroker-" + hashCode() + "-" + tcpSelectorIndex.incrementAndGet());
-            thread.start();
+            TcpSelector tcpSelector = new TcpSelector(this, selectorProvider.openSelector(),
+                threadFactory, "TcpReactor-" + hashCode() + "-TcpSelector-" + index);
+
+            tcpSelectorThreads.add(tcpSelector.tcpSelectorThread);
+            tcpSelectors[index] = tcpSelector;
         }
     }
 
     /**
      * Create a new builder to be used to build a TcpClient.
      *
-     * @return  the new tcp client builder
+     * @return
+     *          The new tcp client builder
      */
     public TcpClient.Builder newTcpClientBuilder() throws IOException {
         synchronized (this) {
             if (closed) {
                 throw new IOException(
-                    "TcpBroker is closed and cannot create Builder", fatalException);
+                    "TcpReactor is closed and cannot create a TcpClientBuilder", fatalException);
             }
 
             return new TcpClient.Builder(this);
@@ -72,13 +85,13 @@ public class TcpBroker implements Closeable {
      * Create a new builder to be used to build a TcpServer.
      *
      * @return
-     *          the new tcp server builder
+     *          The new tcp server builder
      */
     public TcpServer.Builder newTcpServerBuilder() throws IOException {
         synchronized (this) {
             if (closed) {
                 throw new IOException(
-                    "TcpBroker is closed and cannot create TcpServerBuilder", fatalException);
+                    "TcpReactor is closed and cannot create a TcpServerBuilder", fatalException);
             }
 
             return new TcpServer.Builder(this);
@@ -87,9 +100,10 @@ public class TcpBroker implements Closeable {
 
     /**
      * We assign each created channel to the next {@link TcpSelector} in a round-robin fashion.
+     * TODO: Next TcpSelector should be the one with less SelectionKeys in it
      *
      * @return
-     *          the next TcpSelector to be used
+     *          The next TcpSelector to be used
      */
     TcpSelector nextTcpSelector() {
         return tcpSelectors[tcpSelectorIndex.getAndIncrement() % tcpSelectors.length];
@@ -114,10 +128,4 @@ public class TcpBroker implements Closeable {
     public void close() {
         close(null);
     }
-
-// In the future, if needed, we can support this
-//    Throttle throttle;
-//    public Throttle getTcpClientAcceptThrottle() {
-//        return throttle;
-//    }
 }

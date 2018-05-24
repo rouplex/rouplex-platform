@@ -1,9 +1,6 @@
 package org.rouplex.platform.tcp;
 
-import com.codahale.metrics.Histogram;
-import com.codahale.metrics.JmxReporter;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
+import com.codahale.metrics.*;
 
 import java.util.concurrent.TimeUnit;
 
@@ -13,7 +10,10 @@ import java.util.concurrent.TimeUnit;
 public class TcpMetrics {
     public final MetricRegistry tcpBrokerMetrics = new MetricRegistry();
 
-    public final Histogram selectedKeysCounts;
+    public final Counter syncAddTcpRWClientsCount;
+    public final Counter asyncAddTcpRWClientsCount;
+    public final Counter interestOpsCount;
+    public final Histogram selectedKeysBuckets;
     public final Timer timeInsideSelectNano;
     public final Timer timeOutsideSelectNano;
 
@@ -21,10 +21,13 @@ public class TcpMetrics {
         JmxReporter.forRegistry(tcpBrokerMetrics)
             .convertRatesTo(TimeUnit.SECONDS)
             .convertDurationsTo(TimeUnit.MILLISECONDS)
-            .inDomain("tcpbroker")
+            .inDomain("TcpReactor")
             .build().start();
 
-        selectedKeysCounts = tcpBrokerMetrics.histogram("selectedKeysCounts");
+        syncAddTcpRWClientsCount = tcpBrokerMetrics.counter("syncAddTcpRWClientsCount");
+        asyncAddTcpRWClientsCount = tcpBrokerMetrics.counter("asyncAddTcpRWClientsCount");
+        interestOpsCount = tcpBrokerMetrics.counter("interestOpsCount");
+        selectedKeysBuckets = tcpBrokerMetrics.histogram("selectedKeysBuckets");
         timeInsideSelectNano = tcpBrokerMetrics.timer("timeInsideSelectNano");
         timeOutsideSelectNano = tcpBrokerMetrics.timer("timeOutsideSelectNano");
     }

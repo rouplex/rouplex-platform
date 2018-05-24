@@ -14,7 +14,7 @@ import java.nio.channels.ServerSocketChannel;
  * and create {@link TcpClient}s by wrapping them.
  *
  * Instances of this class are obtained via the builder obtainable in its turn via a call to
- * {@link TcpBroker#newTcpServerBuilder()}.
+ * {@link TcpReactor#newTcpServerBuilder()}.
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
@@ -29,8 +29,8 @@ public class TcpServer extends TcpEndPoint {
         protected TcpClientLifecycleListener tcpClientLifecycleListener;
         protected TcpServerLifecycleListener tcpServerLifecycleListener;
 
-        Builder(TcpBroker tcpBroker) {
-            super(tcpBroker);
+        Builder(TcpReactor tcpReactor) {
+            super(tcpReactor);
         }
 
         protected void checkCanBuild() {
@@ -44,9 +44,9 @@ public class TcpServer extends TcpEndPoint {
          * eventual {@link SSLContext} are ignored.
          *
          * @param serverSocketChannel
-         *          a server socket channel, bound or not
+         *          A server socket channel, bound or not
          * @return
-         *          the reference to this builder for chaining calls
+         *          The reference to this builder for chaining calls
          */
         synchronized public Builder withServerSocketChannel(ServerSocketChannel serverSocketChannel) {
             checkNotBuilt();
@@ -61,7 +61,7 @@ public class TcpServer extends TcpEndPoint {
          * @param backlog
          *          the max number of pending connections
          * @return
-         *          the reference to this builder for chaining calls
+         *          The reference to this builder for chaining calls
          */
         synchronized public Builder withBacklog(int backlog) {
             checkNotBuilt();
@@ -77,11 +77,11 @@ public class TcpServer extends TcpEndPoint {
          * {@link SSLContext#getDefault()} should be null and will be ignored.
          *
          * @param secure
-         *          true if the server should accept only secured connections from remote endpoints
+         *          True if the server should accept only secured connections from remote endpoints
          * @param sslContext
-         *          the sslContext to use, or null if system's defaults should be used
+         *          The sslContext to use, or null if system's defaults should be used
          * @return
-         *          the reference to this builder for chaining calls
+         *          The reference to this builder for chaining calls
          */
         synchronized public Builder withSecure(boolean secure, @Nullable SSLContext sslContext) {
             checkNotBuilt();
@@ -99,9 +99,9 @@ public class TcpServer extends TcpEndPoint {
          * Set the server lifecycle event listener, providing events related to binding or unbinding a server.
          *
          * @param tcpServerLifecycleListener
-         *          the event listener
+         *          The event listener
          * @return
-         *          the reference to this builder for chaining calls
+         *          The reference to this builder for chaining calls
          */
         synchronized public Builder withTcpServerLifecycleListener(TcpServerLifecycleListener tcpServerLifecycleListener) {
             checkNotBuilt();
@@ -114,9 +114,9 @@ public class TcpServer extends TcpEndPoint {
          * Set the client lifecycle event listener, providing events related accepting new {@link TcpClient}s
          *
          * @param tcpClientLifecycleListener
-         *          the event listener
+         *          The event listener
          * @return
-         *          the reference to this builder for chaining calls
+         *          The reference to this builder for chaining calls
          */
         synchronized public Builder withTcpClientLifecycleListener(TcpClientLifecycleListener tcpClientLifecycleListener) {
             checkNotBuilt();
@@ -129,9 +129,9 @@ public class TcpServer extends TcpEndPoint {
          * Build the server and bind it to the local address before returning.
          *
          * @return
-         *          the built and bound server
+         *          The built and bound server
          * @throws IOException
-         *          if any problems arise during the server creation and binding
+         *          If any problems arise during the server creation and binding
          */
         @Override
         synchronized public TcpServer build() throws IOException {
@@ -163,9 +163,9 @@ public class TcpServer extends TcpEndPoint {
     /**
      * Bind the tcpServer to the local address and start listening for client connections. Any socket level
      * configurations can be done before invoking this method, by first getting a reference to the internal
-     * {@link ServerSocket}. In particular, set the default size of the receive buffer that will be inherited  by all
-     * {@link TcpClient} accepted via this server (per JDK specs, such setting must be set prior to binding to have
-     * effect for buffers over 64kb).
+     * {@link ServerSocket}. In particular, set the default size of the receive buffer, setting which will be inherited
+     * by all {@link TcpClient}s accepted via this server (per JDK specs, such setting must be set prior to binding to
+     * have effect for buffers over 64kb).
      */
     public void bind() throws IOException {
         ServerSocketChannel serverSocketChannel = (ServerSocketChannel) selectableChannel;

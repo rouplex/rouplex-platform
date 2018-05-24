@@ -270,6 +270,6 @@
         <module>rouplex-platform-jaxrs-client</module>
         <module>rouplex-platform-jersey</module>
         <module>rouplex-platform-tcp</module>
-        <module>rouplex-platform-tcp-instrumentor</module>
+        <!--<module>rouplex-platform-tcp-instrumentor</module>-->
     </modules>
 </project>

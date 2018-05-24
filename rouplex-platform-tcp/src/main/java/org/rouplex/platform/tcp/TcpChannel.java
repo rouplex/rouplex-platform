@@ -14,10 +14,11 @@ import java.util.concurrent.TimeUnit;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-class TcpChannel {
+abstract class TcpChannel {
     protected final Object lock = new Object();
     protected final TcpClient tcpClient;
-    protected final SocketChannel socketChannel;
+    protected final TcpSelector tcpSelector; // cache for performance
+    protected final SocketChannel socketChannel; // cache for performance
 
     // Tandem fields to keep Garbage Collection at minimum
     @GuardedBy("lock") protected Runnable channelReadyCallback;
@@ -26,7 +27,6 @@ class TcpChannel {
     @GuardedBy("lock") protected ByteBuffer currentByteBuffer;
 
     protected int timeoutMillis = -1;
-    protected boolean channelReady;
 
     protected final Runnable notifyAllCallback = new Runnable() {
         @Override
@@ -39,12 +39,15 @@ class TcpChannel {
 
     TcpChannel(TcpClient tcpClient) {
         this.tcpClient = tcpClient;
+        this.tcpSelector = tcpClient.tcpSelector;
         this.socketChannel = (SocketChannel) tcpClient.getSelectableChannel();
     }
 
     public TcpClient getTcpClient() {
         return tcpClient;
     }
+
+    abstract void asyncAddChannelReadyCallback(Runnable channelReadyCallback) throws IOException;
 
     /**
      * The number of milliseconds that the channel is allowed to block performing an operation. Once the
@@ -63,7 +66,9 @@ class TcpChannel {
      * @return the builder for chaining other settings or build the TcpClient.
      */
     public void setTimeout(int timeoutMillis) {
-        this.timeoutMillis = timeoutMillis == 0 ? Integer.MAX_VALUE : timeoutMillis;
+        synchronized (lock) {
+            this.timeoutMillis = timeoutMillis == 0 ? Integer.MAX_VALUE : timeoutMillis;
+        }
     }
 
     /**
@@ -90,20 +95,25 @@ class TcpChannel {
     }
 
     public void addChannelReadyCallback(Runnable channelReadyCallback) throws IOException {
-        synchronized (lock) {
-            if (this.channelReadyCallback == null) {
-                this.channelReadyCallback = channelReadyCallback;
-
-                if (Thread.currentThread() != tcpClient.brokerThread) {
-                    tcpClient.tcpSelector.asyncUpdateTcpClient(tcpClient);
-                }
-            } else {
-                if (channelReadyCallbacks == null) {
-                    channelReadyCallbacks = new ArrayList<>();
-                }
-
-                channelReadyCallbacks.add(channelReadyCallback);
+        if (Thread.currentThread() == tcpSelector.tcpSelectorThread) {
+            syncAddChannelReadyCallback(channelReadyCallback); // most common
+            if (channelReadyCallbacks == null) { // only first listener added
+                tcpSelector.syncAddTcpRWClients.add(tcpClient);
             }
+        } else {
+            asyncAddChannelReadyCallback(channelReadyCallback);
+        }
+    }
+
+    void syncAddChannelReadyCallback(Runnable channelReadyCallback) {
+        if (this.channelReadyCallback == null) {
+            this.channelReadyCallback = channelReadyCallback;
+        } else {
+            if (channelReadyCallbacks == null) {
+                channelReadyCallbacks = new ArrayList<>();
+            }
+
+            channelReadyCallbacks.add(channelReadyCallback);
         }
     }
 
@@ -112,25 +122,18 @@ class TcpChannel {
      * eventual listeners.
      */
     void handleChannelReady() {
-        channelReady = true;
-
-        Runnable channelReadyCallback;
-        List<Runnable> channelReadyCallbacks;
-
-        synchronized (lock) {
-            channelReadyCallback = this.channelReadyCallback;
-            channelReadyCallbacks = this.channelReadyCallbacks;
-            this.channelReadyCallback = null;
-            this.channelReadyCallbacks = null;
-        }
+        Runnable channelReadyCallback = this.channelReadyCallback;
+        List<Runnable> channelReadyCallbacks = this.channelReadyCallbacks;
+        this.channelReadyCallback = null;
+        this.channelReadyCallbacks = null;
 
         if (channelReadyCallback != null) {
             channelReadyCallback.run();
-        }
 
-        if (channelReadyCallbacks != null) {
-            for (Runnable callback : channelReadyCallbacks) {
-                callback.run();
+            if (channelReadyCallbacks != null) {
+                for (Runnable callback : channelReadyCallbacks) {
+                    callback.run();
+                }
             }
         }
     }
