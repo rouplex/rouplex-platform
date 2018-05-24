@@ -9,7 +9,7 @@ import java.io.IOException;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public interface Sender<T> {
+interface Sender<T> {
     /**
      * Send the payload of a generic type.
      *

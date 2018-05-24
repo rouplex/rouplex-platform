@@ -7,7 +7,7 @@ package org.rouplex.platform.io;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public interface Receiver<T> {
+interface Receiver<T> {
     /**
      * Receive a payload of a generic type.
      *
