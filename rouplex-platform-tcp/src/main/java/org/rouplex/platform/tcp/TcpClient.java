@@ -318,7 +318,7 @@ public class TcpClient extends TcpEndPoint {
 
         if (this.currentInterestOps != interestOps) {
             try {
-                tcpSelector.tcpReactor.tcpMetrics.interestOpsCount.inc();
+                // Debug: tcpSelector.tcpReactor.tcpMetrics.interestOpsCount.inc();
                 selectionKey.interestOps(this.currentInterestOps = interestOps);
             } catch (Exception e) { // CancelledKeyException
                 // most likely nothing
