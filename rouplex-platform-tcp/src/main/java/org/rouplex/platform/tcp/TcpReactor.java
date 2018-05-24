@@ -27,7 +27,9 @@ public class TcpReactor implements Closeable {
     private final TcpSelector[] tcpSelectors;
     final Set<Thread> tcpSelectorThreads = new HashSet<Thread>();
     private final AtomicInteger tcpSelectorIndex = new AtomicInteger();
-    public final TcpMetrics tcpMetrics = new TcpMetrics();
+
+    // Move the class back from test space for debugging purposes, then uncomment the following line
+    // public final TcpMetrics tcpMetrics = new TcpMetrics();
 
     private boolean closed;
     private Exception fatalException;

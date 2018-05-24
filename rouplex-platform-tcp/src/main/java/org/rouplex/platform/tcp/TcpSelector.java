@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.nio.channels.*;
 import java.util.*;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -317,14 +316,14 @@ class TcpSelector implements Runnable {
                 // Cache since it will be used inside multiple loops
                 Set<SelectionKey> selectedKeys = selector.selectedKeys();
 
-                tcpReactor.tcpMetrics.asyncAddTcpRWClientsCount.inc(tcpClientsUpdated.size());
+                // Debug: tcpReactor.tcpMetrics.asyncAddTcpRWClientsCount.inc(tcpClientsUpdated.size());
                 // clients that have received RW interests asynchronously
                 for (TcpClient tcpClient : tcpClientsUpdated) {
                     tcpClient.updateInterestOps();
                     selectedKeys.remove(tcpClient.selectionKey);
                 }
 
-                tcpReactor.tcpMetrics.syncAddTcpRWClientsCount.inc(syncAddTcpRWClients.size());
+                // Debug: tcpReactor.tcpMetrics.syncAddTcpRWClientsCount.inc(syncAddTcpRWClients.size());
                 // clients that have received RW interests synchronously during events fired further up
                 Iterator<TcpClient> syncRegisterTcpRWClientsIter = syncAddTcpRWClients.iterator();
                 while (syncRegisterTcpRWClientsIter.hasNext()) {
@@ -342,15 +341,15 @@ class TcpSelector implements Runnable {
 
                 startSelectionNano = System.nanoTime();
                 timeOutsideSelectNano += startSelectionNano - endSelectionNano;
-                tcpReactor.tcpMetrics.timeOutsideSelectNano.update(startSelectionNano - endSelectionNano, TimeUnit.NANOSECONDS);
+                // Debug: tcpReactor.tcpMetrics.timeOutsideSelectNano.update(startSelectionNano - endSelectionNano, TimeUnit.NANOSECONDS);
 
                 int updated = selector.select(selectTimeout);
 
                 endSelectionNano = System.nanoTime();
                 timeInsideSelectNano += endSelectionNano - startSelectionNano;
-                tcpReactor.tcpMetrics.timeInsideSelectNano.update(endSelectionNano - startSelectionNano, TimeUnit.NANOSECONDS);
 
-                tcpReactor.tcpMetrics.selectedKeysBuckets.update(updated);
+                // Debug: tcpReactor.tcpMetrics.timeInsideSelectNano.update(endSelectionNano - startSelectionNano, TimeUnit.NANOSECONDS);
+                // Debug: tcpReactor.tcpMetrics.selectedKeysBuckets.update(updated);
 
                 if (updated != selector.selectedKeys().size()) {
                     if (logger.isLoggable(Level.INFO)) {

@@ -1,10 +1,12 @@
-package org.rouplex.platform.tcp;
+package org.rouplex;
 
 import com.codahale.metrics.*;
 
 import java.util.concurrent.TimeUnit;
 
 /**
+ * Hiding this class here, so we can use it for debugging occasionally.
+ *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class TcpMetrics {
