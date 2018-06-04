@@ -19,6 +19,8 @@ import java.nio.ByteBuffer;
  */
 public class TcpBufferedWriteChannel extends TcpWriteChannel {
     private final TcpWriteChannel writeChannel;
+    private final boolean onlyAsync;
+
     @GuardedBy("lock (content)") private final ByteBuffer byteBuffer;
     @GuardedBy("lock") private boolean shutdownRequested;
     @GuardedBy("lock") private IOException pendingException;
@@ -44,11 +46,12 @@ public class TcpBufferedWriteChannel extends TcpWriteChannel {
         }
     };
 
-    public TcpBufferedWriteChannel(TcpWriteChannel writeChannel, int bufferSize) {
+    public TcpBufferedWriteChannel(TcpWriteChannel writeChannel, int bufferSize, boolean onlyAsync, boolean useDirectBuffers) {
         super(writeChannel.tcpClient);
 
         this.writeChannel = writeChannel;
-        this.byteBuffer = ByteBuffer.allocate(bufferSize);
+        this.byteBuffer = useDirectBuffers ? ByteBuffer.allocateDirect(bufferSize) : ByteBuffer.allocate(bufferSize);
+        this.onlyAsync = onlyAsync;
     }
 
     @Override
@@ -66,8 +69,19 @@ public class TcpBufferedWriteChannel extends TcpWriteChannel {
                 return 0;
             }
 
-            int copied = transfer(bb, byteBuffer);
-            writeChannel.addChannelReadyCallback(pump);
+            int copied;
+            if (byteBuffer.position() == 0) {
+                if (!onlyAsync) {
+                    writeChannel.write(bb);
+                }
+
+                if ((copied = transfer(bb, byteBuffer)) != 0) {
+                    writeChannel.addChannelReadyCallback(pump);
+                }
+            } else {
+                copied = transfer(bb, byteBuffer);
+            }
+
             return copied;
         }
     }
