@@ -8,7 +8,7 @@ import java.util.logging.LogRecord;
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class RouplexSimpleFormatter extends Formatter {
+public class RxSimpleFormatter extends Formatter {
     private final static String NEW_LINE = System.getProperty("line.separator");
     private final static SimpleDateFormat FORMATTER = new SimpleDateFormat("yyyy.MM.dd HH:mm:ss.SSS");
 

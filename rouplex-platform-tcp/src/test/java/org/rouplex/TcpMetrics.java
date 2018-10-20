@@ -23,7 +23,7 @@ public class TcpMetrics {
         JmxReporter.forRegistry(tcpReactorMetrics)
             .convertRatesTo(TimeUnit.SECONDS)
             .convertDurationsTo(TimeUnit.MILLISECONDS)
-            .inDomain("TcpReactor")
+            .inDomain("RouplexReactor")
             .build().start();
 
         syncAddTcpRWClientsCount = tcpReactorMetrics.counter("syncAddTcpRWClientsCount");

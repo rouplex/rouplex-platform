@@ -14,7 +14,15 @@ import java.util.*;
 @NotThreadSafe
 public class SortedByValueMap<K, V> {
     private final Map<K, V> keyValue = new HashMap<K, V>();
-    private final SortedMap<V, Set<K>> orderedByValue = new TreeMap<V, Set<K>>();
+    private final SortedMap<V, Set<K>> orderedByValue;
+
+    public SortedByValueMap() {
+        this(null);
+    }
+
+    public SortedByValueMap(Comparator<V> valueComparator) {
+        orderedByValue = new TreeMap<V, Set<K>>(valueComparator);
+    }
 
     /**
      * Put a new entry.

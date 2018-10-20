@@ -13,67 +13,89 @@ public class ValidationUtils {
         "([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." +
         "([01]?\\d\\d?|2[0-4]\\d|25[0-5])$");
 
-    public static void checkIpAddress(String ipAddress, String fieldName) {
-        if (ipAddress == null) {
-            throw new IllegalArgumentException(String.format("Argument %s cannot be null", fieldName));
+    public static String checkedIpAddress(String argValue, String argName) {
+        if (argValue == null) {
+            throw new IllegalArgumentException(String.format("Argument [%s] cannot be null", argName));
         }
 
-        if (!IP_ADDRESS_PATTERN.matcher(ipAddress).matches()) {
-            throw new IllegalArgumentException(String.format("Argument %s is not an ip address", fieldName));
+        if (!IP_ADDRESS_PATTERN.matcher(argValue).matches()) {
+            throw new IllegalArgumentException(String.format("Argument [%s] is not an ip address", argName));
         }
+
+        return argValue;
     }
 
-    public static void checkNonNullArg(Object val, String fieldName) {
-        if (val == null) {
-            throw new IllegalArgumentException(String.format("Argument %s cannot be null", fieldName));
+    public static <T> T checkedNotNull(T argValue, String argName) {
+        if (argValue == null) {
+            throw new IllegalArgumentException(String.format("Argument [%s] cannot be null", argName));
         }
+
+        return argValue;
     }
 
-    public static void checkNonNegativeArg(int val, String fieldName) {
-        if (val < 0) {
-            throw new IllegalArgumentException(String.format("Argument %s cannot be negative", fieldName));
+    public static int checkedNotNegative(int argValue, String argName) {
+        if (argValue < 0) {
+            throw new IllegalArgumentException(String.format("Argument [%s] cannot be negative", argName));
         }
+        return argValue;
     }
 
-    public static void checkPositiveArg(int val, String fieldName) {
-        if (val <= 0) {
+    public static int checkedPositive(int argValue, String argName) {
+        if (argValue <= 0) {
+            throw new IllegalArgumentException(String.format("Argument [%s] cannot be less than 1", argName));
+        }
+
+        return argValue;
+    }
+
+    public static int checkedPositiveDiff(int argValue, String argName1, String argName2) {
+        if (argValue <= 0) {
             throw new IllegalArgumentException(String.format(
-                "Argument %s cannot be less than 1", fieldName));
+                "Argument [%s] cannot be greater or equal than argument [%s]", argName1, argName2));
         }
+
+        return argValue;
     }
 
-    public static void checkPositiveArgDiff(int val, String fieldName1, String fieldName2) {
-        if (val <= 0) {
+    public static long checkedNotNegative(long argValue, String argName) {
+        if (argValue < 0) {
+            throw new IllegalArgumentException(String.format("Argument [%s] cannot be negative", argName));
+        }
+
+        return argValue;
+    }
+
+    public static long checkedPositive(long argValue, String argName) {
+        if (argValue <= 0) {
+            throw new IllegalArgumentException(String.format("Argument [%s] cannot be less than 1", argName));
+        }
+
+        return argValue;
+    }
+
+    public static long checkedGreaterThanMinusOne(long argValue, String argName) {
+        if (argValue < -1) {
+            throw new IllegalArgumentException(String.format("Argument [%s] cannot be less than -1", argName));
+        }
+
+        return argValue;
+    }
+
+    public static long checkedPositiveDiff(long argValue, String argName1, String argName2) {
+        if (argValue <= 0) {
             throw new IllegalArgumentException(String.format(
-                "Argument %s cannot be greater or equal than argument %s", fieldName1, fieldName2));
+                "Argument [%s] cannot be greater or equal than argument %s", argName1, argName2));
         }
+
+        return argValue;
     }
 
-    public static void checkNonNegativeArg(long val, String fieldName) {
-        if (val < 0) {
-            throw new IllegalArgumentException(String.format("Argument %s cannot be negative", fieldName));
-        }
-    }
-
-    public static void checkPositiveArg(long val, String fieldName) {
-        if (val <= 0) {
-            throw new IllegalArgumentException(String.format(
-                "Argument %s cannot be less than 1", fieldName));
-        }
-    }
-
-    public static void checkPositiveArgDiff(long val, String fieldName1, String fieldName2) {
-        if (val <= 0) {
-            throw new IllegalArgumentException(String.format(
-                "Argument %s cannot be greater or equal than argument %s", fieldName1, fieldName2));
-        }
-    }
-
-    public static void checkDateTimeString(String dateTime, String fieldName) {
+    public static String checkedDateTime(String argValue, String argName) {
         try {
-            TimeUtils.convertIsoInstantToMillis(dateTime);
+            TimeUtils.convertIsoInstantToMillis(argValue);
+            return argValue;
         } catch (ParseException pe) {
-            throw new IllegalArgumentException(String.format("Argument %s cannot be parsed as a dateTime ", fieldName));
+            throw new IllegalArgumentException(String.format("Argument [%s] cannot be parsed as a dateTime", argName));
         }
     }
 }

@@ -11,7 +11,7 @@ import org.glassfish.jersey.process.internal.RequestScoped;
 import org.glassfish.jersey.server.ResourceConfig;
 import org.rouplex.commons.Optional;
 import org.rouplex.commons.Predicate;
-import org.rouplex.commons.reflections.RouplexReflections;
+import org.rouplex.commons.reflections.RxReflections;
 import org.rouplex.platform.RouplexBinder;
 import org.rouplex.platform.RouplexPlatform;
 import org.rouplex.platform.RouplexService;
@@ -50,10 +50,10 @@ public class RouplexJerseyApplication extends ResourceConfig implements RouplexB
         }
 
         void addClass(Class<?> clazz) {
-            Collection<Class<?>> jerseyResources = new RouplexReflections(clazz).getSupperClasses(new Predicate<Class<?>>() {
+            Collection<Class<?>> jerseyResources = new RxReflections(clazz).getSupperClasses(new Predicate<Class<?>>() {
                 @Override
                 public boolean test(Class<?> clazz) {
-                    return !new RouplexReflections(clazz).getDeclaredTypes(new Predicate<Class<?>>() {
+                    return !new RxReflections(clazz).getDeclaredTypes(new Predicate<Class<?>>() {
                         @Override
                         public boolean test(Class<?> value) {
                             return value.isAnnotationPresent(Path.class);
@@ -113,7 +113,7 @@ public class RouplexJerseyApplication extends ResourceConfig implements RouplexB
     }
 
     private String getApplicationPath() {
-        Optional<ApplicationPath> applicationPath = new RouplexReflections(getClass()).getUniqueAnnotationInSuperTypes(ApplicationPath.class);
+        Optional<ApplicationPath> applicationPath = new RxReflections(getClass()).getUniqueAnnotationInSuperTypes(ApplicationPath.class);
         return applicationPath.isPresent() ? applicationPath.get().value() : "";
         // TODO, does servletContext contain the one from web.xml? If yes, great -- return that one instead of "";
     }

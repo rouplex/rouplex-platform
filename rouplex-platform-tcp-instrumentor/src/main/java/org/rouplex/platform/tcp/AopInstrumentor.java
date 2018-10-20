@@ -32,13 +32,13 @@ public class AopInstrumentor {
 
     public final AopConfig aopConfig = AopConfig.shortFormat();
     public final MetricRegistry metricRegistry = new MetricRegistry();
-    public final ConcurrentMap<TcpSelector, RouplexTcpSelectorReporter> tcpSelectors
-            = new ConcurrentHashMap<TcpSelector, RouplexTcpSelectorReporter>();
+    public final ConcurrentMap<TcpReactor.TcpSelector, RouplexTcpSelectorReporter> tcpSelectors
+            = new ConcurrentHashMap<TcpReactor.TcpSelector, RouplexTcpSelectorReporter>();
     public final ConcurrentMap<TcpClient, RouplexTcpClientReporter> tcpClients
             = new ConcurrentHashMap<TcpClient, RouplexTcpClientReporter>();
 
     RouplexTcpSelectorReporter getRouplexTcpSelectorReporter(ProceedingJoinPoint pjp) {
-        TcpSelector tcpSelector = ((TcpSelector) pjp.getThis());
+        TcpReactor.TcpSelector tcpSelector = ((TcpReactor.TcpSelector) pjp.getThis());
         RouplexTcpSelectorReporter tcpSelectorReporter = tcpSelectors.get(tcpSelector);
         if (tcpSelectorReporter == null) {
             tcpSelectors.putIfAbsent(tcpSelector, new RouplexTcpSelectorReporter(tcpSelector, this));

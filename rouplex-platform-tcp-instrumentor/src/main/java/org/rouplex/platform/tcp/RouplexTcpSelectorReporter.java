@@ -15,7 +15,7 @@ public class RouplexTcpSelectorReporter {
     private static final Logger logger = Logger.getLogger(RouplexTcpSelectorReporter.class.getSimpleName());
     public static final String format = "TcpSelector.%s"; // [Hash]
 
-    public final TcpSelector tcpSelector;
+    public final TcpReactor.TcpSelector tcpSelector;
     public final AopInstrumentor aopInstrumentor;
 
     public Meter handleSelectedKey;
@@ -23,7 +23,7 @@ public class RouplexTcpSelectorReporter {
     public String aggregatedId;
     public String completeId;
 
-    public RouplexTcpSelectorReporter(TcpSelector rouplexTcpSedlector, AopInstrumentor aopInstrumentor) {
+    public RouplexTcpSelectorReporter(TcpReactor.TcpSelector rouplexTcpSedlector, AopInstrumentor aopInstrumentor) {
         this.tcpSelector = rouplexTcpSedlector;
         this.aopInstrumentor = aopInstrumentor;
 
@@ -58,7 +58,7 @@ public class RouplexTcpSelectorReporter {
                             int totalKeys = 0;
 
                             try {
-                                for (TcpSelector tcpSelector : aopInstrumentor.tcpSelectors.keySet()) {
+                                for (TcpReactor.TcpSelector tcpSelector : aopInstrumentor.tcpSelectors.keySet()) {
                                    //aaa totalKeys += tcpSelector.selector.keys().size();
                                 }
                             } catch (ConcurrentModificationException cme) {

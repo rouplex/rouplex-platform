@@ -1,6 +1,6 @@
 package org.rouplex.jaxrs.client;
 
-import org.rouplex.commons.reflections.RouplexReflections;
+import org.rouplex.commons.reflections.RxReflections;
 
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
@@ -85,7 +85,7 @@ public class RouplexClientBuilder<T> extends ClientBuilder {
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof MethodWrapper && RouplexReflections.equalSignatures(method, ((MethodWrapper) other).method);
+            return other instanceof MethodWrapper && RxReflections.equalSignatures(method, ((MethodWrapper) other).method);
         }
 
         @Override
@@ -99,11 +99,11 @@ public class RouplexClientBuilder<T> extends ClientBuilder {
 
 
     public <T> T build(Class<T> clazz) {
-        Collection<Class<?>> classes = new RouplexReflections(clazz).getSupperTypes();
+        Collection<Class<?>> classes = new RxReflections(clazz).getSupperTypes();
 
         Path path = null;
 
-        for (Annotation classAnnotation : new RouplexReflections(clazz).getAnnotationsOfSuperTypes()) {
+        for (Annotation classAnnotation : new RxReflections(clazz).getAnnotationsOfSuperTypes()) {
             if (Path.class.isAssignableFrom(classAnnotation.getClass())) {
                 Path probe = (Path) classAnnotation;
                 if (path == null) {
@@ -116,10 +116,10 @@ public class RouplexClientBuilder<T> extends ClientBuilder {
         }
 
 //        Set<Method> methods = new HashSet()
-//        Collection<Method> methods = RouplexReflections.getPublicAbstractInstanceMethods(clazz);
+//        Collection<Method> methods = RxReflections.getPublicAbstractInstanceMethods(clazz);
 
 
-        Collection<Annotation> classAnnotations = new RouplexReflections(clazz).getAnnotationsOfSuperTypes();
+        Collection<Annotation> classAnnotations = new RxReflections(clazz).getAnnotationsOfSuperTypes();
         return null;
     }
 

@@ -5,7 +5,7 @@ package org.rouplex.platform.tcp;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public interface TcpServerLifecycleListener {
+public interface TcpServerListener {
     /**
      * A tcpServer was just bound and will be accepting new {@link TcpClient} connections.
      *
@@ -20,7 +20,7 @@ public interface TcpServerLifecycleListener {
      * @param tcpServer
      *          The tcpServer that failed to bind.
      * @param reason
-     *          The reason for which tcpClient failed connection.
+     *          The reason for which coreTcpClient failed connection.
      */
     void onBindFailed(TcpServer tcpServer, Exception reason);
 

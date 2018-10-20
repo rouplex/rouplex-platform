@@ -8,35 +8,50 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
+import java.util.concurrent.Executor;
 
 /**
- * A class representing a TCP server and which provides the mechanism to accept new connections from remote endpoints
- * and create {@link TcpClient}s by wrapping them.
+ * A class representing a TCP server which provides the mechanism to accept new connections from remote endpoints and
+ * create {@link TcpClient}s by wrapping their {@link SocketChannel}s.
  *
- * Instances of this class are obtained via the builder obtainable in its turn via a call to
- * {@link TcpReactor#newTcpServerBuilder()}.
+ * Instances of this class are obtained via new {@link TcpServer.Builder}
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class TcpServer extends TcpEndPoint {
+    public static class Builder extends TcpServerBuilder<TcpServer, Builder> {
+        public Builder(TcpReactor tcpReactor) {
+            super(tcpReactor);
+        }
+
+        /**
+         * Build the server and bind it to the local address before returning.
+         *
+         * @return
+         *          The built and bound server
+         * @throws Exception
+         *          If any problems arise during the server creation and binding
+         */
+        @Override
+        public TcpServer build() throws Exception {
+            return buildTcpServer();
+        }
+    }
 
     /**
      * A TcpServer builder. The builder can only build one client and once done, any future calls to alter the
      * builder or try to rebuild will fail with {@link IllegalStateException}.
+     *
+     * Not thread safe.
      */
-    public static class Builder extends TcpEndPoint.Builder<TcpServer, Builder> {
+    protected abstract static class TcpServerBuilder<T, B extends TcpServerBuilder> extends TcpEndPointBuilder<T, B> {
         protected int backlog;
-        protected TcpClientLifecycleListener tcpClientLifecycleListener;
-        protected TcpServerLifecycleListener tcpServerLifecycleListener;
+        protected TcpClientListener tcpClientListener;
+        protected TcpServerListener tcpServerListener;
 
-        Builder(TcpReactor tcpReactor) {
+        protected TcpServerBuilder(TcpReactor tcpReactor) {
             super(tcpReactor);
-        }
-
-        protected void checkCanBuild() {
-            if (localAddress == null) {
-                throw new IllegalStateException("Missing value for localAddress"); // maybe remove this constraint
-            }
         }
 
         /**
@@ -48,8 +63,11 @@ public class TcpServer extends TcpEndPoint {
          * @return
          *          The reference to this builder for chaining calls
          */
-        synchronized public Builder withServerSocketChannel(ServerSocketChannel serverSocketChannel) {
+        public B withServerSocketChannel(ServerSocketChannel serverSocketChannel) {
             checkNotBuilt();
+            if (sslContext != null) {
+                throw new IllegalStateException("SslContext is already set and cannot coexist with ServerSocketChannel");
+            }
 
             this.selectableChannel = serverSocketChannel;
             return builder;
@@ -63,7 +81,7 @@ public class TcpServer extends TcpEndPoint {
          * @return
          *          The reference to this builder for chaining calls
          */
-        synchronized public Builder withBacklog(int backlog) {
+        public B withBacklog(int backlog) {
             checkNotBuilt();
 
             this.backlog = backlog;
@@ -71,93 +89,84 @@ public class TcpServer extends TcpEndPoint {
         }
 
         /**
-         * Weather the server should accept only secure clients or not. If secure, the sslContext provides the means to
-         * access the key and trust stores; if sslContext is null then the default {@link SSLContext}, containing JRE's
-         * defaults, and obtainable internally via {@link SSLContext#getDefault()} will be used. If not secure, the
-         * {@link SSLContext#getDefault()} should be null and will be ignored.
-         *
-         * @param secure
-         *          True if the server should accept only secured connections from remote endpoints
-         * @param sslContext
-         *          The sslContext to use, or null if system's defaults should be used
-         * @return
-         *          The reference to this builder for chaining calls
-         */
-        synchronized public Builder withSecure(boolean secure, @Nullable SSLContext sslContext) {
-            checkNotBuilt();
-
-            try {
-                this.sslContext = secure ? sslContext != null ? sslContext : SSLContext.getDefault() : null;
-            } catch (Exception e) {
-                throw new RuntimeException("Could not create SSLContext.", e);
-            }
-
-            return builder;
-        }
-
-        /**
          * Set the server lifecycle event listener, providing events related to binding or unbinding a server.
          *
-         * @param tcpServerLifecycleListener
+         * @param tcpServerListener
          *          The event listener
          * @return
          *          The reference to this builder for chaining calls
          */
-        synchronized public Builder withTcpServerLifecycleListener(TcpServerLifecycleListener tcpServerLifecycleListener) {
+        public B withTcpServerListener(TcpServerListener tcpServerListener) {
             checkNotBuilt();
 
-            this.tcpServerLifecycleListener = tcpServerLifecycleListener;
+            this.tcpServerListener = tcpServerListener;
             return builder;
         }
 
         /**
          * Set the client lifecycle event listener, providing events related accepting new {@link TcpClient}s
          *
-         * @param tcpClientLifecycleListener
+         * @param tcpClientListener
          *          The event listener
          * @return
          *          The reference to this builder for chaining calls
          */
-        synchronized public Builder withTcpClientLifecycleListener(TcpClientLifecycleListener tcpClientLifecycleListener) {
+        public B withTcpClientListener(TcpClientListener tcpClientListener) {
             checkNotBuilt();
 
-            this.tcpClientLifecycleListener = tcpClientLifecycleListener;
+            this.tcpClientListener = tcpClientListener;
             return builder;
         }
 
-        /**
-         * Build the server and bind it to the local address before returning.
-         *
-         * @return
-         *          The built and bound server
-         * @throws IOException
-         *          If any problems arise during the server creation and binding
-         */
         @Override
-        synchronized public TcpServer build() throws IOException {
-            checkNotBuilt();
-            checkCanBuild();
-            builder = null;
+        protected void checkLocalAddressSettable() {
+            if (selectableChannel != null && ((ServerSocketChannel) selectableChannel).socket().isBound()) {
+                throw new IllegalStateException("ServerSocketChannel is already bound and LocalAddress cannot be set anymore");
+            }
+        }
+
+        @Override
+        protected void checkCanBuild() {
+            if (localAddress != null) {
+                return;
+            }
+
+            if (selectableChannel == null) {
+                throw new IllegalStateException("Missing value for localAddress and selectableChannel");
+            }
+
+            if (!((ServerSocketChannel) selectableChannel).socket().isBound()) {
+                throw new IllegalStateException("Missing value for localAddress and for unbound serverSocketChannel");
+            }
+        }
+
+        @Override
+        protected void prepareBuild() throws Exception {
+            super.prepareBuild();
 
             if (selectableChannel == null) {
                 selectableChannel = sslContext == null
-                        ? ServerSocketChannel.open() : SSLServerSocketChannel.open(sslContext);
+                    ? ServerSocketChannel.open() : SSLServerSocketChannel.open(sslContext);
             }
+        }
 
+        protected TcpServer buildTcpServer() throws Exception {
+            prepareBuild();
             return new TcpServer(this);
         }
     }
 
-    private Builder builder;
-    final TcpServerLifecycleListener tcpServerLifecycleListener;
-    final TcpClientLifecycleListener tcpClientLifecycleListener;
+    protected final TcpServerBuilder builder;
+    protected final TcpServerListener tcpServerListener;
+    protected final TcpClientListener tcpClientListener;
 
-    TcpServer(Builder builder) throws IOException {
-        super(builder.selectableChannel, builder.tcpSelector, builder.attachment);
+    protected TcpServer(TcpServerBuilder builder) throws IOException {
+        super(builder.selectableChannel, builder.tcpSelector, builder);
 
         this.builder = builder;
-        tcpClientLifecycleListener = builder.tcpClientLifecycleListener;
-        tcpServerLifecycleListener = builder.tcpServerLifecycleListener;
+        this.attachment = builder.getAttachment();
+        tcpClientListener = builder.tcpClientListener;
+        tcpServerListener = builder.tcpServerListener;
     }
 
     /**
@@ -171,8 +180,12 @@ public class TcpServer extends TcpEndPoint {
         ServerSocketChannel serverSocketChannel = (ServerSocketChannel) selectableChannel;
 
         synchronized (lock) {
-            if (builder == null) {
-                throw new IOException("Server is already " + (open ? "bound and listening" : closed ? "closed" : "binding"));
+            if (open) {
+                throw new IOException("Server is already bound and listening");
+            }
+
+            if (closed) {
+                throw new IOException("Server is already closed");
             }
 
             if (!serverSocketChannel.socket().isBound()) {
@@ -180,12 +193,9 @@ public class TcpServer extends TcpEndPoint {
                 serverSocketChannel.socket().bind(builder.localAddress, builder.backlog);
                 selectableChannel.configureBlocking(false);
             }
-
-            builder = null;
         }
 
         tcpSelector.asyncRegisterTcpEndPoint(this);
-
         waitForOpen(Long.MAX_VALUE); // todo revisit/shorten this
     }
 
@@ -202,19 +212,58 @@ public class TcpServer extends TcpEndPoint {
         return ((ServerSocketChannel) selectableChannel).socket();
     }
 
-    void handleRegistration() throws Exception {
-        selectableChannel.register(tcpSelector.selector, SelectionKey.OP_ACCEPT, this);
-        handleOpen();
+    void syncHandleRegistration() {
+        try {
+            selectableChannel.register(tcpSelector.selector, SelectionKey.OP_ACCEPT, this);
+        } catch (Exception e) {
+            handleException(AutoCloseCondition.ON_CHANNEL_EXCEPTION, e, true);
+        }
 
-        if (tcpServerLifecycleListener != null) {
-            tcpServerLifecycleListener.onBound(this);
+        syncHandleOpen();
+
+        if (tcpServerListener != null) {
+            if (eventsExecutor != null) {
+                eventsExecutor.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            tcpServerListener.onBound(TcpServer.this);
+                        } catch (RuntimeException re) {
+                            handleException(AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, false);
+                        }
+                    }
+                });
+            } else {
+                try {
+                    tcpServerListener.onBound(this);
+                } catch (RuntimeException re) {
+                    handleException(AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, true);
+                }
+            }
         }
     }
 
     @Override
-    void handleUnregistration(@Nullable Exception optionalReason) {
-        if (tcpServerLifecycleListener != null) {
-            tcpServerLifecycleListener.onUnbound(this, optionalReason);
+    void syncHandleUnregistration(@Nullable Exception optionalReason) {
+        if (tcpServerListener != null) {
+            if (eventsExecutor != null) {
+                eventsExecutor.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            tcpServerListener.onUnbound(TcpServer.this, optionalReason);
+                        } catch (RuntimeException re) {
+                            handleException(AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, false);
+                        }
+                    }
+                });
+            } else {
+                try {
+                    tcpServerListener.onUnbound(this, optionalReason);
+                } catch (RuntimeException re) {
+                    handleException(AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, true);
+                }
+            }
         }
     }
 }

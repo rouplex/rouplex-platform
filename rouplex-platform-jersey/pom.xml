@@ -60,4 +60,25 @@
             <version>2.2.5</version>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!--Disabling compiler profile checking since
+            this module is not compact1 as the rest of modules in the project-->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.7.0</version>
+                <executions>
+                    <execution>
+                        <id>compile</id>
+                        <phase>none</phase>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>

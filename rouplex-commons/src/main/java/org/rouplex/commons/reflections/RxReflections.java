@@ -3,7 +3,7 @@ package org.rouplex.commons.reflections;
 import org.rouplex.commons.Optional;
 import org.rouplex.commons.Predicate;
 import org.rouplex.commons.collections.AbstractIterator;
-import org.rouplex.commons.collections.RouplexCollections;
+import org.rouplex.commons.collections.RxCollections;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.AnnotatedElement;
@@ -16,19 +16,19 @@ import java.util.*;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class RouplexReflections {
+public class RxReflections {
     Class<?> clazz;
 
-    public RouplexReflections(Class<?> clazz) {
+    public RxReflections(Class<?> clazz) {
         this.clazz = clazz;
     }
 
     protected Iterator<Class<?>> getDeclaredTypesIterator(Predicate<Class<?>> predicate) {
-        return new ClassAndInterfaceIterator(RouplexCollections.<Class<?>> singletonIterator(clazz), predicate);
+        return new ClassAndInterfaceIterator(RxCollections.<Class<?>> singletonIterator(clazz), predicate);
     }
 
     public Collection<Class<?>> getDeclaredTypes(Predicate<Class<?>> predicate) {
-        return RouplexCollections.getCollection(getDeclaredTypesIterator(predicate));
+        return RxCollections.getCollection(getDeclaredTypesIterator(predicate));
     }
 
     public Collection<Class<?>> getDeclaredTypes() {
@@ -40,7 +40,7 @@ public class RouplexReflections {
     }
 
     public Collection<Class<?>> getSupperClasses(Predicate<Class<?>> predicate) {
-        return RouplexCollections.getCollection(getSupperClassesIterator(predicate));
+        return RxCollections.getCollection(getSupperClassesIterator(predicate));
     }
 
     public Collection<Class<?>> getSupperClasses() {
@@ -52,7 +52,7 @@ public class RouplexReflections {
     }
 
     public Collection<Class<?>> getSupperTypes(Predicate<Class<?>> predicate) {
-        return RouplexCollections.getCollection(getSupperTypesIterator(predicate));
+        return RxCollections.getCollection(getSupperTypesIterator(predicate));
     }
 
     public Collection<Class<?>> getSupperTypes() {
@@ -64,7 +64,7 @@ public class RouplexReflections {
     }
 
     public Collection<Annotation> getAnnotationsOfSuperTypes(Predicate<Annotation> predicate) {
-        return RouplexCollections.getCollection(getAnnotationsOfSuperTypesIterator(predicate));
+        return RxCollections.getCollection(getAnnotationsOfSuperTypesIterator(predicate));
     }
 
     public Collection<Annotation> getAnnotationsOfSuperTypes() {
@@ -79,7 +79,7 @@ public class RouplexReflections {
             }
         });
 
-        return (Collection<A>) RouplexCollections.getCollection(iterator);
+        return (Collection<A>) RxCollections.getCollection(iterator);
     }
 
     public <A extends Annotation> Optional<A> getUniqueAnnotationInSuperTypes(Class<A> annotationClass) {
@@ -149,7 +149,7 @@ public class RouplexReflections {
 
         ClassAndInterfaceIterator(Iterator<Class<?>> classes, Predicate<Class<?>> predicate) {
             super(predicate);
-            remainingClasses = new LinkedList<Class<?>>(RouplexCollections.getCollection(classes));
+            remainingClasses = new LinkedList<Class<?>>(RxCollections.getCollection(classes));
 
             locateNextFiltered();
         }
@@ -172,7 +172,7 @@ public class RouplexReflections {
     private static class AnnotationsOfSuperTypesIterator extends AbstractIterator<Annotation> {
         private final Method method;
         private final Iterator<Class<?>> classHierarchy;
-        private Iterator<Annotation> currentElementAnnotations = RouplexCollections.getEmptyIterator();
+        private Iterator<Annotation> currentElementAnnotations = RxCollections.getEmptyIterator();
 
         AnnotationsOfSuperTypesIterator(AnnotatedElement annotatedElement, Predicate<Annotation> predicate) {
             super(predicate);
@@ -189,7 +189,7 @@ public class RouplexReflections {
                 method = null;
             }
 
-            classHierarchy = new RouplexReflections(clazz).getSupperTypesIterator(null);
+            classHierarchy = new RxReflections(clazz).getSupperTypesIterator(null);
             locateNextFiltered();
         }
 

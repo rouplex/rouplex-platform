@@ -37,11 +37,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class EchoTest {
+public class EchoTestWithMisbehaviors {
     final TcpClient tcpClient;
     final boolean server;
 
-    EchoTest(TcpClient tcpClient, boolean server) {
+    EchoTestWithMisbehaviors(TcpClient tcpClient, boolean server) {
         this.tcpClient = tcpClient;
         this.server = server;
     }
@@ -53,14 +53,23 @@ public class EchoTest {
 
         final AtomicInteger sessionId = new AtomicInteger();
         new TcpServer.Builder(tcpReactor)
-                .withEventsExecutor(null)
                 .withLocalAddress("localhost", 7777)
                 .withTcpClientListener(new TcpClientListener() {
                     @Override
                     public void onConnected(TcpClient tcpClient) {
                         int sid = sessionId.getAndIncrement();
                         tcpClient.setDebugId("TcpSession:" + sid);
-                        report(String.format("%s connected", tcpClient.getDebugId()));
+
+                        if (sid == 0) try {
+                            report(String.format("%s connected, now delaying", tcpClient.getDebugId()));
+                            Thread.sleep(10000);
+                        } catch (InterruptedException ie) {
+                            report("Interrupted");
+                        }
+                        else {
+                            report(String.format("%s connected", tcpClient.getDebugId()));
+                        }
+
                         new EchoTest(tcpClient, true).read(true, true);
                     }
 
@@ -113,7 +122,8 @@ public class EchoTest {
         countDownLatch.await(clientCount * 10, TimeUnit.MILLISECONDS);
         tcpReactor.close();
 
-        Assert.assertEquals(0, countDownLatch.getCount());
+        // One tcp session was delayed on purpose, and did not block others
+        Assert.assertEquals(1, countDownLatch.getCount());
         report("Exec time millis: " + (System.currentTimeMillis() - start));
     }
 

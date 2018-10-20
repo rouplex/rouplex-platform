@@ -11,7 +11,7 @@
 
     <name>Rouplex Platform</name>
     <description>
-        A platform for discovery and communication between various parts of a distributed service or application.
+        A platform for discovery and communication between components in a distributed environment.
 
         At its minimum, the platform is a library which can be used to serialize and deserialize application constructs
         into payloads which it can then send to and receive from remote endpoints. For now it supports TCP and HTTP
@@ -43,10 +43,8 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <jdk>1.8</jdk>
         <maven.compiler.source>${jdk}</maven.compiler.source>
         <maven.compiler.target>${jdk}</maven.compiler.target>
-        <target.profile> </target.profile>
 
         <aspectj.version>1.8.9</aspectj.version>
     </properties>
@@ -144,8 +142,43 @@
         </dependencies>
     </dependencyManagement>
 
+    <dependencies>
+        <!-- Use Yammer for metrics injection and exposing via JMX -->
+        <dependency>
+            <groupId>io.dropwizard.metrics</groupId>
+            <artifactId>metrics-core</artifactId>
+            <version>3.1.0</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>1.8</version>
+                <executions>
+                    <execution>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <tasks>
+                                <echo>JDK: ${jdk}</echo>
+                            </tasks>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-toolchains-plugin</artifactId>
@@ -168,6 +201,12 @@
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.7.0</version>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
                 <version>3.0.1</version>
                 <executions>
@@ -183,7 +222,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
-                <version>2.10</version>
+                <version>3.1.1</version>
                 <executions>
                     <execution>
                         <id>analyze</id>
@@ -200,6 +239,155 @@
     </build>
 
     <profiles>
+        <profile>
+            <id>jdk1.6</id>
+
+            <activation>
+                <property>
+                    <name>jdk</name>
+                    <value>1.6</value>
+                </property>
+            </activation>
+
+            <properties>
+                <!--Set this for cases where a build profile is used for activation (but not system property)-->
+                <jdk>1.6</jdk>
+            </properties>
+
+            <modules>
+                <!--Servlet 4.0 and up are not available in jdk1.6-->
+                <module>rouplex-servlet-container-v3</module>
+            </modules>
+        </profile>
+
+        <profile>
+            <id>jdk1.7</id>
+
+            <activation>
+                <property>
+                    <name>jdk</name>
+                    <value>1.7</value>
+                </property>
+            </activation>
+
+            <properties>
+                <!--Set this for cases where a build profile is used for activation (but not system property)-->
+                <jdk>1.7</jdk>
+            </properties>
+
+            <modules>
+                <module>rouplex-servlet-container-v4</module>
+            </modules>
+        </profile>
+
+        <profile>
+            <id>jdk1.8</id>
+
+            <activation>
+                <property>
+                    <name>jdk</name>
+                    <value>1.8</value>
+                </property>
+            </activation>
+
+            <properties>
+                <!--Set this for cases where a build profile is used for activation (but not system property)-->
+                <jdk>1.8</jdk>
+            </properties>
+
+            <!--Build profiles are available only in jdk1.8-->
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <version>3.7.0</version>
+                        <executions>
+                            <execution>
+                                <id>compile</id>
+                                <phase>compile</phase>
+                                <goals>
+                                    <goal>compile</goal>
+                                </goals>
+
+                                <configuration>
+                                    <compilerArgs>
+                                        <arg>-profile</arg>
+                                        <arg>compact1</arg>
+                                    </compilerArgs>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+
+            <modules>
+                <module>rouplex-servlet-container-v4</module>
+            </modules>
+        </profile>
+
+        <profile>
+            <id>jdk1.9</id>
+
+            <activation>
+                <property>
+                    <name>jdk</name>
+                    <value>1.9</value>
+                </property>
+            </activation>
+
+            <properties>
+                <jdk>1.9</jdk>
+            </properties>
+
+            <modules>
+                <module>rouplex-servlet-container-v4</module>
+            </modules>
+        </profile>
+
+        <profile>
+            <id>jdk1.10</id>
+
+            <activation>
+                <property>
+                    <name>jdk</name>
+                    <value>1.10</value>
+                </property>
+            </activation>
+
+            <properties>
+                <!--Set this for cases where a build profile is used for activation (but not system property)-->
+                <!--Temporary keep this at 1.9 until rouplex-niossl:jdk1.10 becomes accessible in maven central-->
+                <jdk>1.9</jdk>
+            </properties>
+
+            <modules>
+                <module>rouplex-servlet-container-v4</module>
+            </modules>
+        </profile>
+
+        <profile>
+            <id>jdk1.11</id>
+
+            <activation>
+                <property>
+                    <!--Default / Latest-->
+                    <name>!jdk</name>
+                </property>
+            </activation>
+
+            <properties>
+                <!--Set this for cases where a build profile is used for activation (but not system property)-->
+                <!--Temporary keep this at 1.9 until rouplex-niossl:jdk1.11 becomes accessible in maven central-->
+                <jdk>1.9</jdk>
+            </properties>
+
+            <modules>
+                <module>rouplex-servlet-container-v4</module>
+            </modules>
+        </profile>
+
         <profile>
             <id>release</id>
             <build>

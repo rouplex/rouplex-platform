@@ -16,7 +16,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class RouplexReflectionsTest {
+public class RxReflectionsTest {
 
     @Retention(value=RUNTIME)
     @Target(value={TYPE, METHOD})
@@ -90,13 +90,13 @@ public class RouplexReflectionsTest {
 
     @Test
     public void testGetClassHierarchyCollection() {
-        Collection<Class<?>> classHierarchy = new RouplexReflections(Class3.class).getSupperTypes();
+        Collection<Class<?>> classHierarchy = new RxReflections(Class3.class).getSupperTypes();
         Assert.assertEquals(7, classHierarchy.size());
     }
 
     @Test
     public void testGetAnnotationsCollection() {
-        Collection<Annotation> annotations = new RouplexReflections(Class3.class).getAnnotationsOfSuperTypes();
+        Collection<Annotation> annotations = new RxReflections(Class3.class).getAnnotationsOfSuperTypes();
         for (Annotation a : annotations) {
             System.out.println(a.toString());
         }
@@ -108,7 +108,7 @@ public class RouplexReflectionsTest {
 
     @Test
     public void testGetPublicAbstractInstanceMethods() {
-        Collection<Method> methods = new RouplexReflections(Class3.class).getPublicAbstractInstanceMethods();
+        Collection<Method> methods = new RxReflections(Class3.class).getPublicAbstractInstanceMethods();
         for (Method method : methods) {
             System.out.println(method.toString());
         }

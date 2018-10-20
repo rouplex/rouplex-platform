@@ -1,0 +1,182 @@
+/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/bin/java -agentlib:jdwp=transport=dt_socket,address=127.0.0.1:52527,suspend=y,server=n -Dfile.encoding=UTF-8 -classpath "/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/charsets.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/deploy.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/ext/cldrdata.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/ext/dnsns.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/ext/jaccess.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/ext/jfxrt.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/ext/localedata.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/ext/nashorn.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/ext/sunec.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/ext/sunjce_provider.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/ext/sunpkcs11.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/ext/zipfs.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/javaws.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/jce.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/jfr.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/jfxswt.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/jsse.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/management-agent.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/plugin.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/resources.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/jre/lib/rt.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/lib/ant-javafx.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/lib/dt.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/lib/javafx-mx.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/lib/jconsole.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/lib/packager.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/lib/sa-jdi.jar:/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/lib/tools.jar:/Users/andi/Development/github/rouplex-platform-1/rouplex-platform-tcp/target/test-classes:/Users/andi/Development/github/rouplex-platform-1/rouplex-platform-tcp/target/classes:/Users/andi/.m2/repository/org/rouplex/rouplex-niossl/1.6.3/rouplex-niossl-1.6.3.jar:/Users/andi/Development/github/rouplex-platform-1/rouplex-commons/target/classes:/Users/andi/.m2/repository/io/dropwizard/metrics/metrics-core/3.1.0/metrics-core-3.1.0.jar:/Users/andi/.m2/repository/org/slf4j/slf4j-api/1.7.7/slf4j-api-1.7.7.jar:/Users/andi/.m2/repository/junit/junit/4.12/junit-4.12.jar:/Users/andi/.m2/repository/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar:/Applications/IntelliJ IDEA 15.app/Contents/lib/idea_rt.jar" org.rouplex.EchoTest
+Connected to the target VM, address: '127.0.0.1:52527', transport: 'socket'
+TcpClient:0 connected
+TcpClient:2 connected
+TcpSession:2 connected
+TcpClient:0 sending [Hello from TcpClient:0]
+TcpClient:6 connected
+TcpClient:9 connected
+TcpSession:1 connected
+TcpClient:7 connected
+TcpClient:9 sending [Hello from TcpClient:9]
+TcpClient:7 sending [Hello from TcpClient:7]
+TcpClient:5 connected
+TcpClient:5 sending [Hello from TcpClient:5]
+TcpClient:8 connected
+TcpClient:4 connected
+TcpClient:8 sending [Hello from TcpClient:8]
+TcpClient:4 sending [Hello from TcpClient:4]
+TcpSession:5 connected
+TcpClient:3 connected
+TcpSession:4 connected
+TcpClient:3 sending [Hello from TcpClient:3]
+TcpClient:6 sending [Hello from TcpClient:6]
+TcpClient:2 sending [Hello from TcpClient:2]
+TcpClient:1 connected
+TcpSession:0 connected
+TcpClient:1 sending [Hello from TcpClient:1]
+TcpSession:3 connected
+TcpClient:7 sent [Hello from TcpClient:7]
+TcpClient:7 shutting down
+TcpClient:6 sent [Hello from TcpClient:6]
+TcpClient:6 shutting down
+TcpSession:6 connected
+TcpSession:7 connected
+TcpSession:6 received [Hello from TcpClient:6]
+TcpClient:0 sent [Hello from TcpClient:0]
+TcpSession:7 received [Hello from TcpClient:7]
+TcpSession:6 sending [Hello from TcpClient:6]
+TcpClient:0 shutting down
+TcpSession:7 sending [Hello from TcpClient:7]
+TcpSession:6 sent [Hello from TcpClient:6]
+TcpSession:7 sent [Hello from TcpClient:7]
+TcpClient:5 sent [Hello from TcpClient:5]
+TcpSession:5 received [Hello from TcpClient:5]
+TcpClient:5 shutting down
+TcpSession:5 sending [Hello from TcpClient:5]
+TcpSession:5 sent [Hello from TcpClient:5]
+TcpSession:8 connected
+TcpClient:3 sent [Hello from TcpClient:3]
+TcpClient:3 shutting down
+TcpClient:4 sent [Hello from TcpClient:4]
+TcpClient:4 shutting down
+TcpSession:4 received [Hello from TcpClient:4]
+TcpSession:4 sending [Hello from TcpClient:4]
+TcpSession:4 sent [Hello from TcpClient:4]
+TcpClient:3 shutdown
+TcpClient:2 sent [Hello from TcpClient:2]
+TcpClient:2 shutting down
+TcpClient:2 shutdown
+TcpSession:2 received [Hello from TcpClient:2]
+TcpSession:2 sending [Hello from TcpClient:2]
+TcpSession:2 sent [Hello from TcpClient:2]
+TcpSession:8 received [Hello from TcpClient:9]
+TcpSession:2 received eos
+TcpSession:8 sending [Hello from TcpClient:9]
+TcpClient:9 sent [Hello from TcpClient:9]
+TcpSession:8 sent [Hello from TcpClient:9]
+TcpClient:8 sent [Hello from TcpClient:8]
+TcpSession:2 closing
+TcpClient:8 shutting down
+TcpClient:9 shutting down
+TcpClient:9 shutdown
+TcpClient:8 shutdown
+TcpClient:9 received [Hello from TcpClient:9]
+TcpSession:8 received eos
+TcpSession:8 closing
+TcpSession:3 received [Hello from TcpClient:3]
+TcpSession:3 sending [Hello from TcpClient:3]
+TcpSession:3 sent [Hello from TcpClient:3]
+TcpSession:3 received eos
+TcpSession:3 closing
+TcpSession:8 closed
+TcpClient:9 received eos
+TcpSession:3 closed
+TcpClient:9 closing
+TcpSession:8 disconnected
+TcpClient:9 closed
+TcpClient:1 sent [Hello from TcpClient:1]
+TcpClient:1 shutting down
+TcpClient:1 shutdown
+TcpSession:0 received [Hello from TcpClient:0]
+TcpSession:0 sending [Hello from TcpClient:0]
+TcpSession:0 sent [Hello from TcpClient:0]
+TcpSession:1 received [Hello from TcpClient:1]
+TcpSession:1 sending [Hello from TcpClient:1]
+TcpSession:9 connected
+TcpSession:1 sent [Hello from TcpClient:1]
+TcpSession:9 received [Hello from TcpClient:8]
+TcpSession:1 received eos
+TcpSession:9 sending [Hello from TcpClient:8]
+TcpSession:1 closing
+TcpSession:9 sent [Hello from TcpClient:8]
+TcpSession:1 closed
+TcpSession:9 received eos
+TcpClient:8 received [Hello from TcpClient:8]
+TcpSession:9 closing
+TcpSession:3 disconnected
+TcpSession:1 disconnected
+TcpSession:9 closed
+TcpClient:8 received eos
+TcpClient:8 closing
+TcpClient:3 received [Hello from TcpClient:3]
+TcpClient:8 closed
+TcpSession:2 closed
+TcpSession:2 disconnected
+TcpClient:2 received [Hello from TcpClient:2]
+TcpClient:2 received eos
+TcpClient:2 closing
+TcpClient:2 closed
+TcpSession:9 disconnected
+TcpClient:1 received [Hello from TcpClient:1]
+TcpClient:8 disconnected
+TcpClient:9 disconnected
+TcpClient:2 disconnected
+TcpClient:3 received eos
+TcpClient:4 shutdown
+TcpSession:4 received eos
+TcpClient:1 received eos
+TcpClient:3 closing
+TcpClient:4 received [Hello from TcpClient:4]
+TcpClient:3 closed
+TcpClient:1 closing
+TcpClient:3 disconnected
+TcpSession:4 closing
+TcpClient:5 shutdown
+TcpClient:1 closed
+TcpSession:5 received eos
+TcpClient:1 disconnected
+TcpClient:4 received eos
+TcpSession:4 closed
+TcpClient:4 closing
+TcpSession:5 closing
+TcpClient:4 closed
+TcpClient:0 shutdown
+TcpClient:5 received [Hello from TcpClient:5]
+TcpClient:4 disconnected
+TcpClient:0 received [Hello from TcpClient:0]
+TcpSession:5 closed
+TcpSession:4 disconnected
+TcpClient:5 received eos
+TcpSession:0 received eos
+TcpClient:5 closing
+TcpSession:5 disconnected
+TcpSession:0 closing
+TcpSession:6 received eos
+TcpClient:5 disconnected
+TcpClient:6 shutdown
+TcpSession:6 closing
+TcpSession:0 closed
+TcpSession:6 closed
+TcpClient:5 closed
+TcpClient:7 shutdown
+TcpSession:7 received eos
+TcpSession:6 disconnected
+TcpClient:7 received [Hello from TcpClient:7]
+TcpSession:0 disconnected
+TcpClient:0 received eos
+TcpClient:6 received [Hello from TcpClient:6]
+TcpClient:0 closing
+TcpSession:7 closing
+TcpClient:0 closed
+TcpClient:6 received eos
+TcpClient:0 disconnected
+TcpClient:6 closing
+TcpClient:7 received eos
+TcpClient:6 closed
+TcpSession:7 closed
+TcpClient:7 closing
+TcpClient:6 disconnected
+TcpSession:7 disconnected
+TcpClient:7 closed
+TcpClient:7 disconnected

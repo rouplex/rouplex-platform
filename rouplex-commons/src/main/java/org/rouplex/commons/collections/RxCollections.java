@@ -7,7 +7,7 @@ import java.util.*;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class RouplexCollections {
+public class RxCollections {
     public static <T> Iterable<T> getIterable(final Iterator<T> iterator) {
         return new Iterable<T>() {
             @Override
@@ -92,89 +92,5 @@ public class RouplexCollections {
         }
 
         return collection;
-    }
-
-    public static <T> Set<T> ungrowableSet(final Set<? extends T> inner) {
-        return new Set<T>() {
-            @Override
-            public int size() {
-                return inner.size();
-            }
-
-            @Override
-            public boolean isEmpty() {
-                return inner.isEmpty();
-            }
-
-            @Override
-            public boolean contains(Object element) {
-                return inner.contains(element);
-            }
-
-            @Override
-            public Object[] toArray() {
-                return inner.toArray();
-            }
-
-            @Override
-            public <T1> T1[] toArray(T1[] array) {
-                return inner.toArray(array);
-            }
-
-            @Override
-            public String toString() {
-                return inner.toString();
-            }
-
-            @Override
-            public Iterator<T> iterator() {
-                return (Iterator<T>) inner.iterator();
-            }
-
-            @Override
-            public boolean equals(Object other) {
-                return inner.equals(other);
-            }
-
-            @Override
-            public int hashCode() {
-                return inner.hashCode();
-            }
-
-            @Override
-            public void clear() {
-                inner.clear();
-            }
-
-            @Override
-            public boolean remove(Object element) {
-                return inner.remove(element);
-            }
-
-            @Override
-            public boolean containsAll(Collection<?> collection) {
-                return inner.containsAll(collection);
-            }
-
-            @Override
-            public boolean removeAll(Collection<?> collection) {
-                return inner.removeAll(collection);
-            }
-
-            @Override
-            public boolean retainAll(Collection<?> collection) {
-                return inner.retainAll(collection);
-            }
-
-            @Override
-            public boolean add(T element) {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            public boolean addAll(Collection<? extends T> collection) {
-                throw new UnsupportedOperationException();
-            }
-        };
     }
 }

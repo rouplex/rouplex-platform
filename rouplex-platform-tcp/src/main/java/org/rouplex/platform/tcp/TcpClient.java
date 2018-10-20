@@ -1,64 +1,75 @@
 package org.rouplex.platform.tcp;
 
+import org.rouplex.commons.annotations.GuardedBy;
 import org.rouplex.commons.annotations.Nullable;
 import org.rouplex.nio.channels.SSLSocketChannel;
 
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
+import java.nio.channels.*;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeoutException;
 
 /**
  * A class representing a TCP client that connects to a remote endpoint and optionally binds to a local one.
- *
- * Instances of this class are obtained via the builder obtainable in its turn via a call to
- * {@link TcpReactor#newTcpClientBuilder()}.
+
+ * Instances of this class are obtained via the {@link TcpClient.Builder}
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 public class TcpClient extends TcpEndPoint {
-    /**
-     * A TcpClient builder. The builder can only build one client, and once done, any future calls to alter the builder
-     * or try to rebuild will fail with {@link IllegalStateException}.
-     */
-    public static class Builder extends TcpEndPoint.Builder<TcpClient, Builder> {
-        protected SocketAddress remoteAddress;
-        protected String remoteHost;
-        protected int remotePort;
-        protected TcpClientLifecycleListener tcpClientLifecycleListener;
-        protected int connectTimeoutMillis = -1;
 
-        Builder(TcpReactor tcpReactor) {
+    public static class Builder extends TcpClientBuilder<TcpClient, Builder> {
+        public Builder(TcpReactor tcpReactor) {
             super(tcpReactor);
         }
 
-        protected void checkCanBuild() {
-            if (remoteAddress == null) {
-                throw new IllegalStateException("Missing value for remoteAddress");
-            }
+        /**
+         * Build the client and return it.
+         *
+         * @return The built but unconnected client
+         * @throws Exception if any problems arise during the client creation and connection initialization
+         */
+        @Override
+        public TcpClient build() throws Exception {
+            return buildTcpClient();
+        }
+    }
+
+    /**
+     * A TcpClient builder. The builder can only build one client, and once done, any future calls to alter the builder
+     * or try to rebuild will fail with {@link IllegalStateException}.
+     * <p/>
+     * Not thread safe.
+     */
+    protected abstract static class TcpClientBuilder<T, B extends TcpClientBuilder> extends TcpEndPointBuilder<T, B> {
+        protected SocketAddress remoteAddress;
+        protected String remoteHost;
+        protected int remotePort;
+        protected TcpClientListener tcpClientListener;
+        protected int connectTimeoutMillis = -1;
+
+        protected TcpClientBuilder(TcpReactor tcpReactor) {
+            super(tcpReactor);
         }
 
         /**
-         * An optional {@link SocketChannel}. May be connected, in which case the localAddress, remoteAddress and the
-         * eventual {@link SSLContext} are ignored.
+         * An optional {@link SocketChannel}. May be already connecting or connected, in which case the localAddress,
+         * remoteAddress, and {@link SSLContext} cannot be set anymore.
          *
          * @param socketChannel
-         *          A socket channel, in connected or just in open (and not connected) state
+         *          A socket channel, in any non-closed state (unconnected, connecting, connected)
          * @return
          *          The reference to this builder for chaining calls
          */
-        synchronized public Builder withSocketChannel(SocketChannel socketChannel) {
+        public B withSocketChannel(SocketChannel socketChannel) {
             checkNotBuilt();
+            if (sslContext != null) {
+                throw new IllegalStateException("SslContext is already set and cannot coexist with SocketChannel");
+            }
 
             this.selectableChannel = socketChannel;
             return builder;
@@ -72,8 +83,9 @@ public class TcpClient extends TcpEndPoint {
          * @return
          *          The reference to this builder for chaining calls
          */
-        synchronized public Builder withRemoteAddress(SocketAddress remoteAddress) {
+        public B withRemoteAddress(SocketAddress remoteAddress) {
             checkNotBuilt();
+            checkRemoteAddressSettable();
 
             this.remoteAddress = remoteAddress;
             return builder;
@@ -89,33 +101,14 @@ public class TcpClient extends TcpEndPoint {
          * @return
          *          The reference to this builder for chaining calls
          */
-        synchronized public Builder withRemoteAddress(String hostname, int port) {
+        public B withRemoteAddress(String hostname, int port) {
             checkNotBuilt();
+            checkRemoteAddressSettable();
 
             this.remoteHost = hostname;
             this.remotePort = port;
             this.remoteAddress = new InetSocketAddress(hostname, port);
 
-            return builder;
-        }
-
-        /**
-         * Weather the client should connect in secure mode or not. If secure, the sslContext provides the means to
-         * access the key and trust stores; if sslContext is null then a relaxed SSLContext, providing no client
-         * identity and accepting any server identity will be used. If not secure, the {@link SSLContext} should be
-         * null and will be ignored.
-         *
-         * @param secure
-         *          True if the client should connect securely to the remote endpoint
-         * @param sslContext
-         *          The sslContext to use, or null if an allow-all is preferred
-         * @return
-         *          The reference to this builder for chaining calls
-         */
-        synchronized public Builder withSecure(boolean secure, @Nullable SSLContext sslContext) {
-            checkNotBuilt();
-
-            this.sslContext = secure ? sslContext != null ? sslContext : TcpClient.buildRelaxedSSLContext() : null;
             return builder;
         }
 
@@ -130,7 +123,7 @@ public class TcpClient extends TcpEndPoint {
          * @return
          *          The builder for chaining other settings or build the TcpClient.
          */
-        synchronized public Builder withConnectTimeout(int connectTimeoutMillis) {
+        public B withConnectTimeout(int connectTimeoutMillis) {
             checkNotBuilt();
 
             this.connectTimeoutMillis = connectTimeoutMillis == 0 ? Integer.MAX_VALUE : connectTimeoutMillis;
@@ -140,103 +133,133 @@ public class TcpClient extends TcpEndPoint {
         /**
          * Set the client lifecycle event listener.
          *
-         * @param tcpClientLifecycleListener
+         * @param tcpClientListener
          *          The event listener
          * @return
          *          The reference to this builder for chaining calls
          */
-        synchronized public Builder withTcpClientLifecycleListener(TcpClientLifecycleListener tcpClientLifecycleListener) {
+        public B withTcpClientListener(TcpClientListener tcpClientListener) {
             checkNotBuilt();
 
-            this.tcpClientLifecycleListener = tcpClientLifecycleListener;
+            this.tcpClientListener = tcpClientListener;
             return builder;
         }
 
-        /**
-         * Build the client and return it.
-         *
-         * @return
-         *          The built but unconnected client
-         * @throws
-         *          IOException if any problems arise during the client creation and connection initialization
-         */
         @Override
-        synchronized public TcpClient build() throws IOException {
-            checkNotBuilt();
-            checkCanBuild();
-            builder = null;
+        protected void checkLocalAddressSettable() {
+            if (selectableChannel != null && ((SocketChannel) selectableChannel).socket().isBound()) {
+                throw new IllegalStateException("ServerSocketChannel is already bound and LocalAddress cannot be set anymore");
+            }
+        }
 
+        protected void checkRemoteAddressSettable() {
             if (selectableChannel == null) {
-                selectableChannel = sslContext == null ? SocketChannel.open()
-                    : SSLSocketChannel.open(sslContext, remoteHost, remotePort, true, null, null);
+                return;
             }
 
+            SocketChannel socketChannel = ((SocketChannel) selectableChannel);
+            if (socketChannel.isConnectionPending()) {
+                throw new IllegalStateException("SocketChannel is already connecting and RemoteAddress cannot be set anymore");
+            }
+
+            if (socketChannel.isConnected()) {
+                throw new IllegalStateException("SocketChannel is already connected and RemoteAddress cannot be set anymore");
+            }
+        }
+
+        @Override
+        protected void checkCanBuild() {
+            if (remoteAddress == null) {
+                throw new IllegalStateException("Missing value for remoteAddress");
+            }
+        }
+
+        @Override
+        protected void prepareBuild() throws Exception {
+            super.prepareBuild();
+
+            if (selectableChannel == null) {
+                selectableChannel = sslContext == null
+                        ? SocketChannel.open()
+                        : SSLSocketChannel.open(sslContext, remoteHost, remotePort, true, null, null);
+            }
+        }
+
+        protected TcpClient buildTcpClient() throws Exception {
+            prepareBuild();
             return new TcpClient(this);
         }
     }
 
     private final Thread tcpSelectorThread;
     private final TcpServer originatingTcpServer; // not null if this channel was created by a originatingTcpServer
-    private final TcpClientLifecycleListener tcpClientLifecycleListener;
+    private final TcpClientListener tcpClientListener;
 
-    private Builder builder;
-    private int currentInterestOps;
-    private boolean unregistrationHandled;
-
-    // Both fields accessed by the respective channels
+    // Both fields accessed by the respective channels on this package
     final TcpReadChannel tcpReadChannel;
     final TcpWriteChannel tcpWriteChannel;
 
+    @GuardedBy("lock")
+    protected TcpEndPointBuilder builder;
+    @GuardedBy("no-need-guarding")
+    private int interestOps;
+    @GuardedBy("no-need-guarding")
+    private boolean unregistrationHandled;
+
     // Accessed by TcpSelector to optimize by removing this key from selectedKeys set and not handle it twice
+    @GuardedBy("no-need-guarding")
     SelectionKey selectionKey;
 
     /**
-     * Construct an instance using a prepared {@link TcpEndPoint.Builder} instance.
+     * Construct an instance using a prepared {@link TcpClientBuilder} instance.
      *
-     * @param builder
-     *          The builder providing all needed info for creation of the client
+     * @param builder The builder providing all needed info for creation of the client
      */
-    TcpClient(Builder builder) throws IOException {
-        super(builder.selectableChannel, builder.tcpSelector, builder.attachment);
-
-        tcpSelectorThread = builder.tcpSelector.tcpSelectorThread;
-        originatingTcpServer = null;
-        tcpClientLifecycleListener = builder.tcpClientLifecycleListener;
-        tcpReadChannel = new TcpReadChannel(this);
-        tcpWriteChannel = new TcpWriteChannel(this);
-        this.builder = builder;
+    protected TcpClient(TcpClientBuilder builder) throws IOException {
+        this(builder.selectableChannel, builder.tcpSelector, builder, null, builder.tcpClientListener);
+        attachment = builder.getAttachment();
     }
 
     /**
      * Construct an instance by wrapping a {@link SocketChannel} obtained via a {@link ServerSocketChannel#accept()}.
      *
-     * @param socketChannel
-     *          The underlying channel to use for reading and writing to the network
-     * @param tcpSelector
-     *          The tcpSelector wrapping the {@link Selector} used to register the channel
-     * @param originatingTcpServer
-     *          The originatingTcpServer which accepted the underlying channel
+     * @param socketChannel        The underlying channel to use for reading and writing to the network
+     * @param tcpSelector          The tcpSelector wrapping the {@link Selector} used to register the channel
+     * @param originatingTcpServer The originatingTcpServer which accepted the underlying channel
      */
-    TcpClient(SocketChannel socketChannel, TcpSelector tcpSelector, TcpServer originatingTcpServer) throws IOException {
-        super(socketChannel, tcpSelector, null);
+    protected TcpClient(SocketChannel socketChannel, TcpReactor.TcpSelector tcpSelector, TcpServer originatingTcpServer) {
+        this(socketChannel, tcpSelector, originatingTcpServer.builder, originatingTcpServer, originatingTcpServer.tcpClientListener);
+    }
 
-        tcpSelectorThread = tcpSelector.tcpSelectorThread;
+    protected TcpClient(
+            SelectableChannel socketChannel,
+            TcpReactor.TcpSelector tcpSelector,
+            TcpEndPointBuilder builder,
+            TcpServer originatingTcpServer,
+            TcpClientListener tcpClientListener) {
+        super(socketChannel, tcpSelector, builder);
+
+        this.builder = builder;
         this.originatingTcpServer = originatingTcpServer;
-        this.tcpClientLifecycleListener = originatingTcpServer.tcpClientLifecycleListener;
-        tcpReadChannel = new TcpReadChannel(this);
-        tcpWriteChannel = new TcpWriteChannel(this);
+        this.tcpClientListener = tcpClientListener;
+        tcpSelectorThread = tcpSelector.tcpSelectorThread;
+        tcpReadChannel = new TcpReadChannel(this, builder.readBufferSize);
+        tcpWriteChannel = new TcpWriteChannel(this, builder.writeBufferSize);
     }
 
     public void connect() throws IOException {
-        long expirationTimestamp;
+        if (originatingTcpServer != null) {
+            throw new IOException("Functionality not available for clients representing server side sessions");
+        }
 
+        long expirationTimestamp;
         synchronized (lock) {
             if (builder == null) {
                 throw new IOException("Client is already " + (open ? "connected" : closed ? "closed" : "connecting"));
             }
 
-            if (builder.connectTimeoutMillis != -1 &&
-                tcpSelector.tcpReactor.tcpSelectorThreads.contains(tcpSelectorThread)) {
+            TcpClientBuilder builder = (TcpClientBuilder) this.builder;
+            if (builder.connectTimeoutMillis != -1 && tcpSelector.getTcpSelectorThreads().contains(tcpSelectorThread)) {
                 throw new IOException("Cannot perform blocking connect from a TcpReactor thread");
             }
 
@@ -247,7 +270,7 @@ public class TcpClient extends TcpEndPoint {
             }
 
             expirationTimestamp = builder.connectTimeoutMillis == -1
-                ? -1 : System.currentTimeMillis() + builder.connectTimeoutMillis;
+                    ? -1 : System.currentTimeMillis() + builder.connectTimeoutMillis;
 
             builder = null;
         }
@@ -266,10 +289,8 @@ public class TcpClient extends TcpEndPoint {
     /**
      * Get the remote endpoint address where this instance is connected, or is connecting to.
      *
-     * @return
-     *          The remote endpoint address
-     * @throws
-     *          IOException if the instance is already closed or any other problem retrieving the remote address
+     * @return The remote endpoint address
+     * @throws IOException if the instance is already closed or any other problem retrieving the remote address
      */
     public SocketAddress getRemoteAddress() throws IOException {
         synchronized (lock) {
@@ -294,75 +315,101 @@ public class TcpClient extends TcpEndPoint {
      * Get the local {@link TcpServer} instance this client belongs to, or null if this client was not obtained via a
      * local tcp server.
      *
-     * @return
-     *          The TcpServer this client belongs to, if any
+     * @return The TcpServer this client belongs to, if any
      */
     public TcpServer getOriginatingTcpServer() {
         return originatingTcpServer;
     }
 
-    void handleRegistration() throws Exception {
-        if (originatingTcpServer != null) {
-            selectionKey = selectableChannel.register(tcpSelector.selector, 0, this);
-            handleConnected();
-        } else {
-            selectionKey = selectableChannel.register(tcpSelector.selector, SelectionKey.OP_CONNECT, this);
+    void syncHandleRegistration() {
+        try {
+            if (originatingTcpServer != null) {
+                selectionKey = selectableChannel.register(tcpSelector.selector, 0, this);
+                syncHandleConnected();
+            } else {
+                selectionKey = selectableChannel.register(tcpSelector.selector, SelectionKey.OP_CONNECT, this);
+            }
+        } catch (Exception e) {
+            handleException(AutoCloseCondition.ON_CHANNEL_EXCEPTION, e, true);
         }
     }
 
-    void updateInterestOps() {
-        int interestOps = tcpReadChannel.channelReadyCallback != null ? SelectionKey.OP_READ : 0;
+    void syncUpdateInterestOps() {
+        int newInterestOps = tcpReadChannel.channelReadyCallback != null ? SelectionKey.OP_READ : 0;
         if (tcpWriteChannel.channelReadyCallback != null) {
-            interestOps |= SelectionKey.OP_WRITE;
+            newInterestOps |= SelectionKey.OP_WRITE;
         }
 
-        if (this.currentInterestOps != interestOps) {
+        if (this.interestOps != newInterestOps) {
             try {
                 // Debug: tcpSelector.tcpReactor.tcpMetrics.interestOpsCount.inc();
-                selectionKey.interestOps(this.currentInterestOps = interestOps);
+                selectionKey.interestOps(this.interestOps = newInterestOps);
             } catch (Exception e) { // CancelledKeyException
-                // most likely nothing
+                handleException(AutoCloseCondition.ON_CHANNEL_EXCEPTION, e, true);
             }
         }
     }
 
-    void handleOpsReady() throws Exception {
-        if (selectionKey.isConnectable()) {
-            if (!((SocketChannel) selectionKey.channel()).finishConnect()) {
-                return;
+    void syncHandleOpsReady() {
+        try {
+            if (selectionKey.isConnectable()) {
+                if (!((SocketChannel) selectionKey.channel()).finishConnect()) {
+                    return;
+                }
+
+                selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_CONNECT);
+                syncHandleConnected();
             }
 
-            selectionKey.interestOps(selectionKey.interestOps() & ~SelectionKey.OP_CONNECT);
-            handleConnected();
-        }
+            if (selectionKey.isReadable()) {
+                tcpReadChannel.syncHandleChannelReady();
+            }
 
-        if (selectionKey.isReadable()) {
-            tcpReadChannel.handleChannelReady();
-        }
-
-        if (selectionKey.isWritable()) {
-            tcpWriteChannel.handleChannelReady();
+            if (selectionKey.isWritable()) {
+                tcpWriteChannel.syncHandleChannelReady();
+            }
+        } catch (Exception e) {
+            handleException(AutoCloseCondition.ON_CHANNEL_EXCEPTION, e, true);
         }
     }
 
     /**
-     * Called by {@link TcpSelector} when the underlying channel just got connected to the remote endpoint.
+     * Called by {@link TcpReactor.TcpSelector} when the underlying channel just got connected to the remote endpoint.
+     * This method must not throw any exceptions (including RuntimeException)
      */
-    private void handleConnected() {
-        handleOpen();
+    private void syncHandleConnected() {
+        syncHandleOpen();
 
-        if (tcpClientLifecycleListener != null) {
-            tcpClientLifecycleListener.onConnected(this);
+        if (tcpClientListener == null) {
+            return;
+        }
+
+        if (eventsExecutor == null) {
+            try {
+                tcpClientListener.onConnected(TcpClient.this);
+            } catch (RuntimeException re) {
+                handleException(AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, true);
+            }
+        } else {
+            eventsExecutor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        tcpClientListener.onConnected(TcpClient.this);
+                    } catch (RuntimeException re) {
+                        handleException(AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, false);
+                    }
+                }
+            });
         }
     }
 
     /**
-     * Called by {@link TcpSelector} when the underlying channel just got disconnected from the remote endpoint.
-     * Always called from the same thread, which is also the one updating eosReceived and eosApplied, so no need for
-     * synchronization here.
+     * Called by {@link TcpReactor.TcpSelector} when the underlying channel just got disconnected from the remote
+     * endpoint.
      */
     @Override
-    void handleUnregistration(@Nullable Exception optionalReason) {
+    void syncHandleUnregistration(@Nullable Exception optionalReason) {
         // it is possible that this method gets called twice within the same selector loop, once with a selection and
         // once with handlePreSelectUpdates, so avoid firing twice. unregistrationHandled needs no syncing since
         // it is only accessed from same selector's thread.
@@ -371,64 +418,65 @@ public class TcpClient extends TcpEndPoint {
         }
 
         unregistrationHandled = true;
-        setExceptionAndCloseChannel(optionalReason);
 
         try {
             // give user of channel a chance to catch the failed state
-            tcpReadChannel.handleChannelReady();
+            if (tcpReadChannel.channelReadyCallback != null) {
+                tcpReadChannel.syncHandleChannelReady();
+            }
         } catch (RuntimeException e) {
-            // RuntimeException (from client handling notification)
+            // RuntimeException from client handling notification -- nothing we can do at this stage
         }
 
         try {
             // give user of channel a chance to catch the failed state
-            tcpWriteChannel.handleChannelReady();
+            if (tcpWriteChannel.channelReadyCallback != null) {
+                tcpWriteChannel.syncHandleChannelReady();
+            }
         } catch (RuntimeException e) {
-            // RuntimeException (from client handling notification)
+            // RuntimeException from client handling notification -- nothing we can do at this stage
         }
 
-        try {
-            if (tcpClientLifecycleListener != null) {
-                if (open) {
-                    tcpClientLifecycleListener.onDisconnected(this, ioException);
+        if (tcpClientListener != null) {
+            if (open) {
+                if (eventsExecutor != null) {
+                    eventsExecutor.execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                tcpClientListener.onDisconnected(TcpClient.this, ioException);
+                            } catch (RuntimeException re) {
+                                // RuntimeException from client handling notification -- nothing we can do at this stage
+                            }
+                        }
+                    });
                 } else {
-                    tcpClientLifecycleListener.onConnectionFailed(this, ioException);
+                    try {
+                        tcpClientListener.onDisconnected(this, ioException);
+                    } catch (RuntimeException re) {
+                        // RuntimeException from client handling notification -- nothing we can do at this stage
+                    }
+                }
+            } else {
+                if (eventsExecutor != null) {
+                    eventsExecutor.execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                tcpClientListener.onConnectionFailed(TcpClient.this, ioException);
+                            } catch (RuntimeException re) {
+                                // RuntimeException from client handling notification -- nothing we can do at this stage
+                            }
+                        }
+                    });
+                } else {
+                    try {
+                        tcpClientListener.onConnectionFailed(this, ioException);
+                    } catch (RuntimeException re) {
+                        // RuntimeException from client handling notification -- nothing we can do at this stage
+                    }
                 }
             }
-        } catch (RuntimeException re) {
-            // RuntimeException (from client handling notification)
-        }
-    }
-
-    private static final TrustManager trustAll = new X509TrustManager() {
-        @Override
-        public void checkClientTrusted(X509Certificate[] x509Certificates, String s) throws CertificateException {
-        }
-
-        @Override
-        public void checkServerTrusted(X509Certificate[] x509Certificates, String s) throws CertificateException {
-        }
-
-        @Override
-        public X509Certificate[] getAcceptedIssuers() {
-            return new X509Certificate[0];
-        }
-    };
-
-    /**
-     * Convenience method for building client side {@link SSLContext} instances that do not provide a client identity
-     * and accept any server identity.
-     *
-     * @return
-     *          A relaxed sslContext
-     */
-    public static SSLContext buildRelaxedSSLContext() {
-        try {
-            SSLContext sslContext = SSLContext.getInstance("TLS");
-            sslContext.init(null, new TrustManager[] {trustAll}, null);
-            return sslContext;
-        } catch (Exception e) {
-            throw new RuntimeException(e);
         }
     }
 }
