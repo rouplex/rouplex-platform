@@ -3,7 +3,6 @@ package org.rouplex.platform.http;
 import org.rouplex.platform.tcp.TcpClient;
 import org.rouplex.platform.tcp.TcpReadChannel;
 
-import javax.servlet.*;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;

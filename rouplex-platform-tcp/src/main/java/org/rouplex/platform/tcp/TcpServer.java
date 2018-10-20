@@ -9,7 +9,6 @@ import java.net.ServerSocket;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.util.concurrent.Executor;
 
 /**
  * A class representing a TCP server which provides the mechanism to accept new connections from remote endpoints and
@@ -160,7 +159,7 @@ public class TcpServer extends TcpEndPoint {
     protected final TcpServerListener tcpServerListener;
     protected final TcpClientListener tcpClientListener;
 
-    protected TcpServer(TcpServerBuilder builder) throws IOException {
+    protected TcpServer(TcpServerBuilder builder) {
         super(builder.selectableChannel, builder.tcpSelector, builder);
 
         this.builder = builder;

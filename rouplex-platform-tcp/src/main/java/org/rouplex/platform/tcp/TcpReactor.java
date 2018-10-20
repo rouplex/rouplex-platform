@@ -228,6 +228,10 @@ public class TcpReactor implements Closeable {
             tcpSelectorThread.start();
         }
 
+        protected TcpReactor getReactor() {
+            return TcpReactor.this;
+        }
+
         Set<Thread> getTcpSelectorThreads() {
             return tcpSelectorThreads;
         }

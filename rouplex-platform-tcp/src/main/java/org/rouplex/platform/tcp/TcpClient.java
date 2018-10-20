@@ -10,7 +10,6 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.nio.channels.*;
-import java.util.concurrent.Executor;
 import java.util.concurrent.TimeoutException;
 
 /**

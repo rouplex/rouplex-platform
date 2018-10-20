@@ -1,7 +1,10 @@
 package org.rouplex;
 
 import org.junit.Assert;
-import org.rouplex.platform.tcp.*;
+import org.rouplex.platform.tcp.TcpClient;
+import org.rouplex.platform.tcp.TcpClientListener;
+import org.rouplex.platform.tcp.TcpReactor;
+import org.rouplex.platform.tcp.TcpServer;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;

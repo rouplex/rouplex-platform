@@ -3,7 +3,10 @@ package org.rouplex.commons.collections;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.*;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Random;
+import java.util.UUID;
 
 /**
  * @author Andi Mullaraj (andimullaraj at gmail.com)

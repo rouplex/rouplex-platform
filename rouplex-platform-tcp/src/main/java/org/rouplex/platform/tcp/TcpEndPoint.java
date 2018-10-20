@@ -64,6 +64,7 @@ abstract class TcpEndPoint implements Closeable {
 
         protected TcpEndPointBuilder(TcpReactor tcpReactor) {
             tcpSelector = tcpReactor.nextTcpSelector();
+            eventsExecutor = tcpSelector.getReactor().eventsExecutor;
         }
 
         /**
@@ -86,7 +87,7 @@ abstract class TcpEndPoint implements Closeable {
          * A local hostname and port where to bind to.
          *
          * @param hostname
-         *          The local hostname to bind to, or null to bind to the loopback (later maybe bind in all of them)
+         *          The local hostname to bind to, or null to bind to the localhost (later maybe bind in all of them)
          * @param port
          *          The port to bind to, or 0 to bind to any available port
          * @return
