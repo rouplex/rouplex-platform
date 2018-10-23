@@ -1,9 +1,5 @@
 package org.rouplex.platform.tcp;
 
-/**
- * @author Andi Mullaraj (andimullaraj at gmail.com)
- */
-
 import org.rouplex.commons.annotations.GuardedBy;
 import org.rouplex.commons.annotations.Nullable;
 import org.rouplex.commons.builders.SingleInstanceBuilder;
@@ -27,10 +23,10 @@ import java.util.concurrent.Executor;
  */
 abstract class TcpEndPoint implements Closeable {
     public enum AutoCloseCondition {
-        ON_CHANNEL_EOS(0b1),
-        ON_CHANNEL_EXCEPTION(0b10),
-        ON_USER_CALLBACK_EXCEPTION(0b100),
-        ON_ANY_CONDITION(0b111);
+        ON_CHANNEL_EOS(1),
+        ON_CHANNEL_EXCEPTION(2),
+        ON_USER_CALLBACK_EXCEPTION(4),
+        ON_ANY_CONDITION(7);
 
         protected final int mask;
 
@@ -58,13 +54,29 @@ abstract class TcpEndPoint implements Closeable {
 
         protected int readBufferSize = 0x1000;
         protected int writeBufferSize = 0x1000;
-        protected boolean onlyAsync;
+        protected boolean onlyAsyncReadWrite;
         protected boolean useDirectBuffers;
-        protected int autoCloseMask = 0b111;
+        protected int autoCloseMask = AutoCloseCondition.ON_ANY_CONDITION.mask;
 
         protected TcpEndPointBuilder(TcpReactor tcpReactor) {
             tcpSelector = tcpReactor.nextTcpSelector();
-            eventsExecutor = tcpSelector.getReactor().eventsExecutor;
+            eventsExecutor = tcpReactor.eventsExecutor;
+        }
+
+        protected void checkCanBuild() {
+            if (!onlyAsyncReadWrite) {
+                return;
+            }
+
+            if (readBufferSize == 0) {
+                throw new IllegalStateException(
+                        "The [onlyAsyncReadWrite] is set to true, in which case the [readBufferSize] cannot be set to 0");
+            }
+
+            if (writeBufferSize == 0) {
+                throw new IllegalStateException(
+                        "The [onlyAsyncReadWrite] is set to true, in which case the [writeBufferSize] cannot be set to 0");
+            }
         }
 
         /**
@@ -127,12 +139,15 @@ abstract class TcpEndPoint implements Closeable {
 
         /**
          * Use this initial buffer size for the read channel. This setting can be changed on the built 
-         * {@link TcpReadChannel} later on. This setting has no effect if the eventsExecutor is set to null.
+         * {@link TcpReadChannel} later on.
          *
          * Default is 4Kb.
          *
          * @param readBufferSize
-         *          The size for the buffer holding data read from tcp stack but not from user, in bytes.
+         *          The size for the buffer holding data read from tcp stack but not yet by the user, in bytes.
+         *          If set to 0, then no buffering will take place and calls to read will result in calls to read
+         *          directly from underlying socket channel. In that case, the onlyAsyncReadWrite property must be set (or left}
+         *          to false, prior to building the {@link TcpClient} or {@link TcpServer}
          * @return
          *          The reference to this builder for chaining calls
          */
@@ -145,12 +160,15 @@ abstract class TcpEndPoint implements Closeable {
 
         /**
          * Use this initial buffer size for the write channel. This setting can be changed on the built 
-         * {@link TcpWriteChannel} later on. This setting has no effect if the eventsExecutor is set to null.
+         * {@link TcpWriteChannel} later on.
          *
          * Default is 4Kb.
          *
          * @param writeBufferSize
-         *          The size for the buffer holding data writen from user but not yet to tcp stack, in bytes.
+         *          The size for the buffer holding data written from user but not yet to tcp stack, in bytes.
+         *          If set to 0, then no buffering will take place and calls to write will result in calls to write
+         *          directly to underlying socket channel. In that case, the onlyAsyncReadWrite property must be set (or left}
+         *          to false, prior to building the {@link TcpClient} or {@link TcpServer}
          * @return
          *          The reference to this builder for chaining calls
          */
@@ -158,47 +176,6 @@ abstract class TcpEndPoint implements Closeable {
             checkNotBuilt();
 
             this.writeBufferSize = writeBufferSize;
-            return builder;
-        }
-
-        /**
-         * If set to true:
-         *
-         * In a {@link TcpWriteChannel} created subsequently via this builder, all the calls to write to the
-         * channel will result in the content being written to the internal buffer, and the call returning
-         * immediately.
-         *
-         * In a {@link TcpReadChannel} created subsequently via this builder, all the calls to read from the
-         * channel will result in the content being read from the internal buffer, and the call returning
-         * immediately.
-         *
-         * In that case, the calling thread may be waiting the least in the case of an ssl channel, since the
-         * heavier task of performing the crypto work is done in the context of another thread.
-         *
-         * If set to false:
-         *
-         * In a {@link TcpWriteChannel} created subsequently via this builder, there will be an attempt to send as
-         * many bytes possible (honoring an eventual timeout set), and the rest will be kept in the internal buffer,
-         * up to the point it has capacity (the rest will be left in the caller's {@link ByteBuffer} argument).
-         *
-         * In a {@link TcpReadChannel} created subsequently via this builder, there will be an attempt to read as
-         * many bytes possible (honoring an eventual timeout set), and any content not being able to fit in
-         * caller's {@link ByteBuffer} argument will be left in the inner buffer.
-         *
-         * This setting can prove useful in case of secure channels where all the crypto call must be performed
-         * from the specific thread pool that the client is using.
-         *
-         * Default is false.
-         *
-         * @param onlyAsync
-         *          True for always writing the bytes asynchronously, false otherwise
-         * @return
-         *          The reference to this builder for chaining calls
-         */
-        public B withOnlyAsync(boolean onlyAsync) {
-            checkNotBuilt();
-
-            this.onlyAsync = onlyAsync;
             return builder;
         }
 
@@ -221,10 +198,58 @@ abstract class TcpEndPoint implements Closeable {
             return builder;
         }
 
+
+        /**
+         * If set to true:
+         *
+         * In a {@link TcpWriteChannel} created subsequently via this builder, all the calls to write to the
+         * channel will result in the content being written to the internal buffer, and the call returning
+         * immediately.
+         *
+         * In a {@link TcpReadChannel} created subsequently via this builder, all the calls to read from the
+         * channel will result in the content being read from the internal buffer, and the call returning
+         * immediately.
+         *
+         * In this case, the calling thread will be waiting the least in the case of an ssl channel, since the
+         * heavier task of performing the crypto work is done in the context of another thread.
+         *
+         * If either the readBufferSize or writeBufferSize are set to 0, the {@link #build()} call will fail with
+         * {@link IllegalStateException} since async functionality cannot be provided without help from such buffers.
+         *
+         * If set to false:
+         *
+         * In a {@link TcpWriteChannel} created subsequently via this builder, there will be an attempt to send as
+         * many bytes possible (honoring an eventual timeout set), and the rest will be kept in the internal buffer,
+         * up to the point it has capacity (the rest will be left in the caller's {@link ByteBuffer} argument).
+         *
+         * In a {@link TcpReadChannel} created subsequently via this builder, there will be an attempt to read as
+         * many bytes possible (honoring an eventual timeout set), and any content not being able to fit in
+         * caller's {@link ByteBuffer} argument will be left in the inner buffer.
+         *
+         * This setting can prove useful in case of secure channels where all the crypto call must be performed from
+         * the specific thread pool that the client is using. A somewhat more advanced feature we are keeping this
+         * setting as protected but it can be exposed by subclassing this {@link B} class.
+         *
+         * Default is false.
+         *
+         * @param onlyAsyncReadWrite
+         *          True for always reading and writing the bytes asynchronously, false otherwise
+         * @return
+         *          The reference to this builder for chaining calls
+         */
+        protected B withOnlyAsyncReadWrite(boolean onlyAsyncReadWrite) {
+            checkNotBuilt();
+
+            this.onlyAsyncReadWrite = onlyAsyncReadWrite;
+            return builder;
+        }
+
         /**
          * An optional {@link Set<AutoCloseCondition>} to define the closing strategy for the {@link TcpClient} that
          * will be built via this builder or the TcpClients that will be created from a {@link TcpServer} which in turn
          * is created via this builder.
+         *
+         * The default is to close the {@link TcpEndPoint} upon any condition present.
          *
          * @param autoCloseConditions
          *          A set of disjointed {@link AutoCloseCondition} values
@@ -290,8 +315,7 @@ abstract class TcpEndPoint implements Closeable {
     // can be set from any thread and read from any thread, hence the guarding
     @GuardedBy("lock") protected boolean closed;
 
-    @GuardedBy("lock")
-    protected IOException ioException;
+    @GuardedBy("lock") protected Exception finalException;
 
     // Not essential
     private String debugId;
@@ -352,11 +376,11 @@ abstract class TcpEndPoint implements Closeable {
      *          IOException if the channel is not opened by expirationTimestamp time, it has been already closed, or
      *          gets closed asynchronously, or any other problem trying to connect.
      */
-    protected void waitForOpen(long expirationTimestamp) throws IOException {
+    protected void waitForOpen(long expirationTimestamp) throws Exception {
         synchronized (lock) {
             while (!open) {
-                if (ioException != null) {
-                    throw ioException;
+                if (finalException != null) {
+                    throw finalException;
                 }
 
                 long waitMillis = expirationTimestamp - System.currentTimeMillis();
@@ -379,7 +403,7 @@ abstract class TcpEndPoint implements Closeable {
      */
     protected void syncHandleOpen() {
         synchronized (lock) {
-            if (ioException == null) {
+            if (finalException == null) {
                 open = true;
                 lock.notifyAll();
             }
@@ -403,7 +427,11 @@ abstract class TcpEndPoint implements Closeable {
                 setExceptionAndCloseChannel(exception);
                 syncHandleUnregistration(exception);
             } else {
-                closeAndAsyncUnregister(exception);
+                try {
+                    closeAndAsyncUnregister(exception);
+                } catch (IOException ioe) {
+                    // todo ... figure out tcpSelector closed which is being silenced ...
+                }
             }
         }
     }
@@ -413,14 +441,9 @@ abstract class TcpEndPoint implements Closeable {
         closeAndAsyncUnregister(null);
     }
 
-    protected void closeAndAsyncUnregister(Exception exception) {
-        setExceptionAndCloseChannel(exception);
-
-        try {
-            tcpSelector.asyncUnregisterTcpEndPoint(TcpEndPoint.this, null);
-        } catch (IOException ioe) {
-            // selector has been closed, nothing can be done here
-        }
+    protected void closeAndAsyncUnregister(@Nullable Exception optionalException) throws IOException {
+        setExceptionAndCloseChannel(optionalException);
+        tcpSelector.asyncUnregisterTcpEndPoint(TcpEndPoint.this, optionalException);
     }
 
     /**
@@ -436,8 +459,8 @@ abstract class TcpEndPoint implements Closeable {
             if (!closed) {
                 closed = true;
 
-                if (ioException == null && optionalException != null) {
-                    ioException = optionalException instanceof IOException
+                if (finalException == null && optionalException != null) {
+                    finalException = optionalException instanceof IOException
                         ? (IOException) optionalException : new IOException(optionalException);
                 }
 
@@ -445,8 +468,8 @@ abstract class TcpEndPoint implements Closeable {
                     //System.out.println("Closing channel: " + selectableChannel + " " + optionalException);
                     selectableChannel.close();
                 } catch (Exception e) {
-                    if (ioException == null) {
-                        ioException = new IOException("Exception during channel close", e);
+                    if (finalException == null) {
+                        finalException = new IOException("Exception during channel close", e);
                     }
                 }
 
@@ -462,11 +485,15 @@ abstract class TcpEndPoint implements Closeable {
     }
 
     public String getDebugId() {
-        return debugId;
+        synchronized (lock) {
+            return debugId;
+        }
     }
 
     public void setDebugId(String debugId) {
-        this.debugId = debugId;
+        synchronized (lock) {
+            this.debugId = debugId;
+        }
     }
 
     public Object getAttachment() {

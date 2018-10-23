@@ -126,16 +126,18 @@ public class TcpServer extends TcpEndPoint {
 
         @Override
         protected void checkCanBuild() {
+            super.checkCanBuild();
+
             if (localAddress != null) {
                 return;
             }
 
             if (selectableChannel == null) {
-                throw new IllegalStateException("Missing value for localAddress and selectableChannel");
+                throw new IllegalStateException("Missing value for localAddress and serverSocketChannel");
             }
 
             if (!((ServerSocketChannel) selectableChannel).socket().isBound()) {
-                throw new IllegalStateException("Missing value for localAddress and for unbound serverSocketChannel");
+                throw new IllegalStateException("Missing value for localAddress and serverSocketChannel is not bound");
             }
         }
 
@@ -175,7 +177,7 @@ public class TcpServer extends TcpEndPoint {
      * by all {@link TcpClient}s accepted via this server (per JDK specs, such setting must be set prior to binding to
      * have effect for buffers over 64kb).
      */
-    public void bind() throws IOException {
+    public void bind() throws Exception {
         ServerSocketChannel serverSocketChannel = (ServerSocketChannel) selectableChannel;
 
         synchronized (lock) {
@@ -243,7 +245,7 @@ public class TcpServer extends TcpEndPoint {
     }
 
     @Override
-    void syncHandleUnregistration(@Nullable Exception optionalReason) {
+    void syncHandleUnregistration(@Nullable final Exception optionalReason) {
         if (tcpServerListener != null) {
             if (eventsExecutor != null) {
                 eventsExecutor.execute(new Runnable() {

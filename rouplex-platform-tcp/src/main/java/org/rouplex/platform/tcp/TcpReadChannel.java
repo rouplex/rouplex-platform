@@ -1,5 +1,7 @@
 package org.rouplex.platform.tcp;
 
+import org.rouplex.commons.annotations.GuardedBy;
+import org.rouplex.commons.utils.BufferUtils;
 import org.rouplex.commons.utils.ValidationUtils;
 import org.rouplex.platform.io.ReactiveReadChannel;
 
@@ -14,8 +16,8 @@ import java.nio.ByteBuffer;
 public class TcpReadChannel extends TcpChannel implements ReactiveReadChannel {
     private final ByteBuffer oneByteBB = ByteBuffer.allocate(1);
 
-    TcpReadChannel(TcpClient tcpClient, int bufferSize) {
-        super(tcpClient, bufferSize);
+    TcpReadChannel(TcpClient tcpClient) {
+        super(tcpClient, ChannelType.Read);
     }
 
     @Override
@@ -43,6 +45,15 @@ public class TcpReadChannel extends TcpChannel implements ReactiveReadChannel {
         return read;
     }
 
+//    @GuardedBy("lock")
+//    private int readBuffered(ByteBuffer bb) throws IOException {
+//        int total = BufferUtils.transfer(byteBuffer, bb);
+//        if (bb.hasRemaining() && !onlyAsyncReadWrite) {
+//            int read = socketChannel.read(byteBuffer);
+//            if (read != )
+//        }
+//    }
+//
     @Override
     public int read(ByteBuffer byteBuffer) throws IOException {
         ValidationUtils.checkedNotNull(byteBuffer, "byteBuffer");
@@ -54,27 +65,16 @@ public class TcpReadChannel extends TcpChannel implements ReactiveReadChannel {
             }
 
             if (blocked) {
-                throw new IOException("ReadChannel cannot perform concurrent blocking reads");
+                throw new IOException("TcpReadChannel cannot perform concurrent blocking reads");
             }
 
-            if (timeoutMillis == -1) {
-                try {
+            try {
+                if (timeoutMillis == -1) {
                     read = socketChannel.read(byteBuffer);
-                } catch (IOException ioe) {
-                    tcpClient.handleException(TcpEndPoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION,
-                            ioe, tcpClient.tcpSelector.tcpSelectorThread == Thread.currentThread());
-                    throw ioe;
-                }
-            } else {
-                // Don't penalise other TcpClients on same selector/thread by blocking here
-                if (tcpSelector.tcpSelectorThread == Thread.currentThread()) {
-                    throw new IOException("ReadChannel cannot perform blocking reads from reactor thread");
-                }
+                } else {
+                    blocked = true;
+                    long startTimestamp = System.currentTimeMillis();
 
-                blocked = true;
-                long startTimestamp = System.currentTimeMillis();
-
-                try {
                     while ((read = socketChannel.read(byteBuffer)) == 0) {
                         long remainingMillis = System.currentTimeMillis() - (startTimestamp + timeoutMillis);
                         if (remainingMillis <= 0) {
@@ -84,14 +84,14 @@ public class TcpReadChannel extends TcpChannel implements ReactiveReadChannel {
                         addChannelReadyCallback(notifyAllCallback);
                         lock.wait(remainingMillis);
                     }
-                } catch (InterruptedException ie) {
-                    read = 0;
-                } catch (IOException ioe) {
-                    tcpClient.handleException(TcpEndPoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION,
-                            ioe, tcpClient.tcpSelector.tcpSelectorThread == Thread.currentThread());
-                    throw ioe;
                 }
-
+            } catch (InterruptedException ie) {
+                read = 0;
+            } catch (IOException ioe) {
+                tcpClient.handleException(TcpEndPoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION,
+                        ioe, tcpClient.tcpSelector.tcpSelectorThread == Thread.currentThread());
+                throw ioe;
+            } finally {
                 blocked = false;
             }
 
@@ -103,10 +103,5 @@ public class TcpReadChannel extends TcpChannel implements ReactiveReadChannel {
         }
 
         return read;
-    }
-
-    @Override
-    void asyncAddChannelReadyCallback(Runnable channelReadyCallback) throws IOException {
-        tcpSelector.asyncAddTcpReadChannel(tcpClient, channelReadyCallback);
     }
 }

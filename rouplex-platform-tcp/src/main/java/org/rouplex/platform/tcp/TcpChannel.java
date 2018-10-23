@@ -2,6 +2,7 @@ package org.rouplex.platform.tcp;
 
 import org.rouplex.commons.annotations.GuardedBy;
 import org.rouplex.commons.utils.BufferUtils;
+import org.rouplex.commons.utils.ValidationUtils;
 import org.rouplex.platform.io.ReactiveChannel;
 
 import java.io.IOException;
@@ -17,7 +18,16 @@ import java.util.concurrent.TimeUnit;
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
 abstract class TcpChannel implements ReactiveChannel {
+    protected enum ChannelType {
+        Read, Write
+    }
+
+    protected enum BufferingType {
+        None, Direct, Heap
+    }
+
     protected final Object lock = new Object();
+    protected final ChannelType channelType;
     protected final TcpClient tcpClient;
     protected final TcpReactor.TcpSelector tcpSelector; // cache for performance
     protected final SocketChannel socketChannel; // cache for performance
@@ -30,10 +40,10 @@ abstract class TcpChannel implements ReactiveChannel {
     @GuardedBy("lock") protected int timeoutMillis = -1;
     @GuardedBy("lock") protected boolean eos;
 
-    @GuardedBy("lock") private int desiredBufferSize;
-    @GuardedBy("lock") private ByteBuffer byteBuffer;
-    private final boolean useDirectBuffers;
-    private final boolean onlyAsync;
+    @GuardedBy("lock") protected int desiredBufferSize = -1;
+    @GuardedBy("lock") protected ByteBuffer byteBuffer;
+    protected final BufferingType bufferingType;
+    protected final boolean onlyAsyncReadWrite;
 
     protected final Runnable notifyAllCallback = new Runnable() {
         @Override
@@ -44,28 +54,42 @@ abstract class TcpChannel implements ReactiveChannel {
         }
     };
 
-    TcpChannel(TcpClient tcpClient, int bufferSize) {
+    protected TcpChannel(TcpClient tcpClient, ChannelType channelType) {
         this.tcpClient = tcpClient;
-        this.useDirectBuffers = tcpClient.builder.useDirectBuffers;
-        this.onlyAsync = tcpClient.builder.onlyAsync;
+        this.tcpSelector = tcpClient.tcpSelector;
+        this.socketChannel = (SocketChannel) tcpClient.selectableChannel;
+        this.onlyAsyncReadWrite = tcpClient.builder.onlyAsyncReadWrite;
+        this.channelType = channelType;
 
-        tcpSelector = tcpClient.tcpSelector;
-        socketChannel = (SocketChannel) tcpClient.selectableChannel;
-        byteBuffer = useDirectBuffers ? ByteBuffer.allocateDirect(bufferSize) : ByteBuffer.allocate(bufferSize);
+        int bufferSize = channelType == ChannelType.Read
+                ? tcpClient.builder.readBufferSize : tcpClient.builder.writeBufferSize;
+
+        this.bufferingType = bufferSize == 0 ? BufferingType.None
+            : tcpClient.builder.useDirectBuffers ? BufferingType.Direct : BufferingType.Heap;
+
+        switch (bufferingType){
+            case None:
+                this.byteBuffer = null;
+                break;
+            case Direct:
+                this.byteBuffer = ByteBuffer.allocateDirect(bufferSize);
+                break;
+            case Heap:
+                this.byteBuffer = ByteBuffer.allocate(bufferSize);
+                break;
+        }
     }
-
-    abstract void asyncAddChannelReadyCallback(Runnable channelReadyCallback) throws IOException;
 
     public TcpClient getTcpClient() {
         return tcpClient;
     }
 
     /**
-     * This call is performed once the oposing channel has received it own EOS. It first checks if the owning TcpClient
+     * This call is performed once the opposing channel has received it own EOS. It first checks if the owning TcpClient
      * is configured to auto close on EOS, then it checks if this channel has received its EOS, and if so, it closes the
      * owning client.
      */
-    protected void handleEos() {
+    protected void handleEos() throws IOException {
         if ((tcpClient.autoCloseMask & TcpEndPoint.AutoCloseCondition.ON_CHANNEL_EOS.mask) != 0) {
             synchronized (lock) {
                 if (!eos) {
@@ -100,6 +124,15 @@ abstract class TcpChannel implements ReactiveChannel {
     }
 
     public void setBufferSize(int bufferSize) {
+        if (byteBuffer == null) {
+            throw new IllegalArgumentException("This channel is not buffered, so bufferSize cannot be set");
+        }
+
+        if (bufferSize <= 0) {
+            ValidationUtils.checkedNotNegative(bufferSize, "bufferSize");
+            throw new IllegalArgumentException("This channel is buffered, so bufferSize must be positive");
+        }
+
         synchronized (lock) {
             desiredBufferSize = bufferSize;
             ensureBufferSize();
@@ -108,21 +141,21 @@ abstract class TcpChannel implements ReactiveChannel {
 
     public int getBufferSize() {
         synchronized (lock) {
-            return desiredBufferSize != 0 ? desiredBufferSize : byteBuffer.capacity();
+            return desiredBufferSize == -1 ? byteBuffer.capacity() : desiredBufferSize;
         }
     }
 
     @GuardedBy("lock")
-    private void ensureBufferSize() {
-        if (desiredBufferSize != 0 && byteBuffer.position() <= desiredBufferSize) {
-            ByteBuffer newByteBuffer = useDirectBuffers
-                ? ByteBuffer.allocateDirect(desiredBufferSize)
-                : ByteBuffer.allocate(desiredBufferSize);
+    protected void ensureBufferSize() {
+        if (byteBuffer.position() <= desiredBufferSize) {
+            ByteBuffer newByteBuffer = bufferingType == BufferingType.Direct
+                    ? ByteBuffer.allocateDirect(desiredBufferSize)
+                    : ByteBuffer.allocate(desiredBufferSize);
 
             byteBuffer.flip();
             BufferUtils.transfer(byteBuffer, newByteBuffer);
             byteBuffer = newByteBuffer;
-            desiredBufferSize = 0;
+            desiredBufferSize = -1; // reset
             lock.notifyAll();
         }
     }
@@ -146,15 +179,42 @@ abstract class TcpChannel implements ReactiveChannel {
     }
 
     @Override
-    public void addChannelReadyCallback(Runnable channelReadyCallback) throws IOException {
+    public void addChannelReadyCallback(final Runnable channelReadyCallback) throws IOException {
         if (Thread.currentThread() == tcpSelector.tcpSelectorThread) {
             syncAddChannelReadyCallback(channelReadyCallback); // most common
         } else {
-            asyncAddChannelReadyCallback(channelReadyCallback);
+            if (bufferingType == BufferingType.None) {
+                tcpSelector.asyncAddTcpChannelCallback(tcpClient, channelType, channelReadyCallback);
+            } else {
+                synchronized (lock) {
+                    if (byteBuffer.position() > 0) {
+                        if (tcpClient.eventsExecutor == null) {
+                            try {
+                                channelReadyCallback.run();
+                            } catch (RuntimeException re) {
+                                tcpClient.handleException(TcpEndPoint.AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, false);
+                            }
+                        } else {
+                            tcpClient.eventsExecutor.execute(new Runnable() {
+                                @Override
+                                public void run() {
+                                    try {
+                                        channelReadyCallback.run();
+                                    } catch (RuntimeException re) {
+                                        tcpClient.handleException(TcpEndPoint.AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, false);
+                                    }
+                                }
+                            });
+                        }
+                    } else {
+                        tcpSelector.asyncAddTcpChannelCallback(tcpClient, channelType, channelReadyCallback);
+                    }
+                }
+            }
         }
     }
 
-    void syncAddChannelReadyCallback(Runnable channelReadyCallback) {
+    protected void syncAddChannelReadyCallback(Runnable channelReadyCallback) {
         if (this.channelReadyCallback == null) {
             this.channelReadyCallback = channelReadyCallback;
             tcpSelector.updatedTcpClients.add(tcpClient); // avoid adding the client more than once
@@ -175,7 +235,7 @@ abstract class TcpChannel implements ReactiveChannel {
     protected void syncHandleChannelReady() {
         // todo remove this if-statement once assessed channelReadyCallback is never null
         if (this.channelReadyCallback == null) {
-            throw new Error("EEE");
+            throw new Error("Internal Error. Assessment 'channelReadyCallback != null' failed");
         }
 
         final Runnable channelReadyCallback = this.channelReadyCallback;

@@ -380,7 +380,7 @@
             <properties>
                 <!--Set this for cases where a build profile is used for activation (but not system property)-->
                 <!--Temporary keep this at 1.9 until rouplex-niossl:jdk1.11 becomes accessible in maven central-->
-                <jdk>1.9</jdk>
+                <jdk>1.8</jdk>
             </properties>
 
             <modules>

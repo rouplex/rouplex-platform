@@ -168,6 +168,8 @@ public class TcpClient extends TcpEndPoint {
 
         @Override
         protected void checkCanBuild() {
+            super.checkCanBuild();
+
             if (remoteAddress == null) {
                 throw new IllegalStateException("Missing value for remoteAddress");
             }
@@ -190,31 +192,27 @@ public class TcpClient extends TcpEndPoint {
         }
     }
 
-    private final Thread tcpSelectorThread;
-    private final TcpServer originatingTcpServer; // not null if this channel was created by a originatingTcpServer
-    private final TcpClientListener tcpClientListener;
+    protected final Thread tcpSelectorThread;
+    protected final TcpServer originatingTcpServer; // not null if this channel was created by a originatingTcpServer
+    protected final TcpClientListener tcpClientListener;
 
     // Both fields accessed by the respective channels on this package
-    final TcpReadChannel tcpReadChannel;
-    final TcpWriteChannel tcpWriteChannel;
+    protected final TcpReadChannel tcpReadChannel;
+    protected final TcpWriteChannel tcpWriteChannel;
 
-    @GuardedBy("lock")
-    protected TcpEndPointBuilder builder;
-    @GuardedBy("no-need-guarding")
-    private int interestOps;
-    @GuardedBy("no-need-guarding")
-    private boolean unregistrationHandled;
+    @GuardedBy("lock") protected TcpEndPointBuilder builder;
+    @GuardedBy("no-need-guarding") private int interestOps;
+    @GuardedBy("no-need-guarding") private boolean unregistrationHandled;
 
     // Accessed by TcpSelector to optimize by removing this key from selectedKeys set and not handle it twice
-    @GuardedBy("no-need-guarding")
-    SelectionKey selectionKey;
+    @GuardedBy("no-need-guarding") SelectionKey selectionKey;
 
     /**
      * Construct an instance using a prepared {@link TcpClientBuilder} instance.
      *
      * @param builder The builder providing all needed info for creation of the client
      */
-    protected TcpClient(TcpClientBuilder builder) throws IOException {
+    protected TcpClient(TcpClientBuilder builder) {
         this(builder.selectableChannel, builder.tcpSelector, builder, null, builder.tcpClientListener);
         attachment = builder.getAttachment();
     }
@@ -242,11 +240,11 @@ public class TcpClient extends TcpEndPoint {
         this.originatingTcpServer = originatingTcpServer;
         this.tcpClientListener = tcpClientListener;
         tcpSelectorThread = tcpSelector.tcpSelectorThread;
-        tcpReadChannel = new TcpReadChannel(this, builder.readBufferSize);
-        tcpWriteChannel = new TcpWriteChannel(this, builder.writeBufferSize);
+        tcpReadChannel = new TcpReadChannel(this);
+        tcpWriteChannel = new TcpWriteChannel(this);
     }
 
-    public void connect() throws IOException {
+    public void connect() throws Exception {
         if (originatingTcpServer != null) {
             throw new IOException("Functionality not available for clients representing server side sessions");
         }
@@ -258,9 +256,7 @@ public class TcpClient extends TcpEndPoint {
             }
 
             TcpClientBuilder builder = (TcpClientBuilder) this.builder;
-            if (builder.connectTimeoutMillis != -1 && tcpSelector.getTcpSelectorThreads().contains(tcpSelectorThread)) {
-                throw new IOException("Cannot perform blocking connect from a TcpReactor thread");
-            }
+            this.builder = null;
 
             SocketChannel socketChannel = (SocketChannel) selectableChannel;
             if (!socketChannel.isConnectionPending() && !socketChannel.isConnected()) {
@@ -270,8 +266,6 @@ public class TcpClient extends TcpEndPoint {
 
             expirationTimestamp = builder.connectTimeoutMillis == -1
                     ? -1 : System.currentTimeMillis() + builder.connectTimeoutMillis;
-
-            builder = null;
         }
 
         tcpSelector.asyncRegisterTcpEndPoint(this);
@@ -344,6 +338,12 @@ public class TcpClient extends TcpEndPoint {
                 // Debug: tcpSelector.tcpReactor.tcpMetrics.interestOpsCount.inc();
                 selectionKey.interestOps(this.interestOps = newInterestOps);
             } catch (Exception e) { // CancelledKeyException
+                /**
+                 * {@link SelectionKey#isValid()} has returned true prior to calling syncUpdateInterestOps, but since
+                 * the channel can be closed at any time from a concurrent call, we may catch
+                 * {@link CancellationException} here, in which case, we go on with unregistering the chanel if not
+                 * already registered
+                 */
                 handleException(AutoCloseCondition.ON_CHANNEL_EXCEPTION, e, true);
             }
         }
@@ -351,7 +351,9 @@ public class TcpClient extends TcpEndPoint {
 
     void syncHandleOpsReady() {
         try {
-            if (selectionKey.isConnectable()) {
+            int readyOps = selectionKey.readyOps();
+
+            if ((readyOps & SelectionKey.OP_CONNECT) != 0) {
                 if (!((SocketChannel) selectionKey.channel()).finishConnect()) {
                     return;
                 }
@@ -360,11 +362,11 @@ public class TcpClient extends TcpEndPoint {
                 syncHandleConnected();
             }
 
-            if (selectionKey.isReadable()) {
+            if ((readyOps & SelectionKey.OP_READ) != 0) {
                 tcpReadChannel.syncHandleChannelReady();
             }
 
-            if (selectionKey.isWritable()) {
+            if ((readyOps & SelectionKey.OP_WRITE) != 0) {
                 tcpWriteChannel.syncHandleChannelReady();
             }
         } catch (Exception e) {
@@ -418,6 +420,13 @@ public class TcpClient extends TcpEndPoint {
 
         unregistrationHandled = true;
 
+        synchronized (lock) {
+            if (finalException == null) {
+                finalException = optionalReason;
+                lock.notifyAll();
+            }
+        }
+
         try {
             // give user of channel a chance to catch the failed state
             if (tcpReadChannel.channelReadyCallback != null) {
@@ -443,7 +452,7 @@ public class TcpClient extends TcpEndPoint {
                         @Override
                         public void run() {
                             try {
-                                tcpClientListener.onDisconnected(TcpClient.this, ioException);
+                                tcpClientListener.onDisconnected(TcpClient.this, finalException);
                             } catch (RuntimeException re) {
                                 // RuntimeException from client handling notification -- nothing we can do at this stage
                             }
@@ -451,7 +460,7 @@ public class TcpClient extends TcpEndPoint {
                     });
                 } else {
                     try {
-                        tcpClientListener.onDisconnected(this, ioException);
+                        tcpClientListener.onDisconnected(this, finalException);
                     } catch (RuntimeException re) {
                         // RuntimeException from client handling notification -- nothing we can do at this stage
                     }
@@ -462,7 +471,7 @@ public class TcpClient extends TcpEndPoint {
                         @Override
                         public void run() {
                             try {
-                                tcpClientListener.onConnectionFailed(TcpClient.this, ioException);
+                                tcpClientListener.onConnectionFailed(TcpClient.this, finalException);
                             } catch (RuntimeException re) {
                                 // RuntimeException from client handling notification -- nothing we can do at this stage
                             }
@@ -470,7 +479,7 @@ public class TcpClient extends TcpEndPoint {
                     });
                 } else {
                     try {
-                        tcpClientListener.onConnectionFailed(this, ioException);
+                        tcpClientListener.onConnectionFailed(this, finalException);
                     } catch (RuntimeException re) {
                         // RuntimeException from client handling notification -- nothing we can do at this stage
                     }

@@ -120,9 +120,9 @@ public class TcpReactor implements Closeable {
         }
     }
 
-    private final TcpSelector[] tcpSelectors;
-    private final Set<Thread> tcpSelectorThreads = new HashSet<Thread>();
-    private final AtomicInteger tcpSelectorIndex = new AtomicInteger();
+    protected final TcpSelector[] tcpSelectors;
+    protected final Set<Thread> tcpReactorThreads = new HashSet<Thread>();
+    protected final AtomicInteger tcpSelectorIndex = new AtomicInteger();
     protected final Executor eventsExecutor;
     protected final boolean userSetEventsExecutor;
 
@@ -135,7 +135,7 @@ public class TcpReactor implements Closeable {
             TcpSelector tcpSelector = new TcpSelector(builder.selectorProvider.openSelector(),
                 builder.threadFactory, "TcpReactor-" + hashCode() + "-TcpSelector-" + index);
 
-            tcpSelectorThreads.add(tcpSelector.tcpSelectorThread);
+            tcpReactorThreads.add(tcpSelector.tcpSelectorThread);
             tcpSelectors[index] = tcpSelector;
         }
     }
@@ -147,14 +147,15 @@ public class TcpReactor implements Closeable {
      * @return
      *          The next TcpSelector to be used
      */
-    TcpSelector nextTcpSelector() {
+    protected TcpSelector nextTcpSelector() {
         return tcpSelectors[tcpSelectorIndex.getAndIncrement() % tcpSelectors.length];
     }
 
     @Override
     public void close() {
+        Exception exception = new Exception("TcpReactor is closed");
         for (TcpSelector tcpSelector : tcpSelectors) {
-            tcpSelector.requestClose(null);
+            tcpSelector.requestClose(exception);
         }
     }
 
@@ -168,36 +169,26 @@ public class TcpReactor implements Closeable {
      *
      * @author Andi Mullaraj (andimullaraj at gmail.com)
      */
-    class TcpSelector implements Runnable {
+    protected class TcpSelector implements Runnable {
         private final Object lock = new Object();
-        final Selector selector;
-        final Thread tcpSelectorThread;
+        protected final Selector selector;
+        protected final Thread tcpSelectorThread;
 
-        @GuardedBy("lock")
-        private List<TcpEndPoint> asyncRegisterTcpEndPoints = new ArrayList<TcpEndPoint>();
-        @GuardedBy("lock")
-        private Map<TcpEndPoint, Exception> asyncUnregisterTcpEndPoints = new HashMap<TcpEndPoint, Exception>();
-        @GuardedBy("lock")
-        private List<TcpClient> asyncAddTcpReadClients = new ArrayList<TcpClient>();
-        @GuardedBy("lock")
-        private List<Runnable> asyncAddTcpReadCallbacks = new ArrayList<Runnable>();
-        @GuardedBy("lock")
-        private List<TcpClient> asyncAddTcpWriteClients = new ArrayList<TcpClient>();
-        @GuardedBy("lock")
-        private List<Runnable> asyncAddTcpWriteCallbacks = new ArrayList<Runnable>();
+        @GuardedBy("lock") private List<TcpEndPoint> asyncRegisterTcpEndPoints = new ArrayList<TcpEndPoint>();
+        @GuardedBy("lock") private Map<TcpEndPoint, Exception> asyncUnregisterTcpEndPoints = new HashMap<TcpEndPoint, Exception>();
+        @GuardedBy("lock") private List<TcpClient> asyncAddTcpReadClients = new ArrayList<TcpClient>();
+        @GuardedBy("lock") private List<Runnable> asyncAddTcpReadCallbacks = new ArrayList<Runnable>();
+        @GuardedBy("lock") private List<TcpClient> asyncAddTcpWriteClients = new ArrayList<TcpClient>();
+        @GuardedBy("lock") private List<Runnable> asyncAddTcpWriteCallbacks = new ArrayList<Runnable>();
 
-        @GuardedBy("not-needed: always accessed from same thread")
-        protected Set<TcpClient> updatedTcpClients = new HashSet<TcpClient>();
+        @GuardedBy("not-needed: always accessed from same thread") protected Set<TcpClient> updatedTcpClients = new HashSet<TcpClient>();
 
-        @GuardedBy("lock") // Most likely will go away
-        private List<PendingOps> pausingInterestOps = new ArrayList<PendingOps>();
-        @GuardedBy("lock") // Most likely will go away
-        private List<PendingOps> resumingInterestOps = new ArrayList<PendingOps>();
-        // Most likely will go away
-        private final SortedMap<Long, List<PendingOps>> resumingLaterInterestOps = new TreeMap<Long, List<PendingOps>>();
+        @GuardedBy("lock") private List<PendingOps> pausingInterestOps = new ArrayList<PendingOps>(); // Most likely will go away
+        @GuardedBy("lock") private List<PendingOps> resumingInterestOps = new ArrayList<PendingOps>(); // Most likely will go away
+        private final SortedMap<Long, List<PendingOps>> resumingLaterInterestOps = new TreeMap<Long, List<PendingOps>>(); // Most likely will go away
 
-        @GuardedBy("lock") private boolean closed;
-        private Exception fatalException;
+        // Value becomes non null when selector is closed, for whatever reason
+        @GuardedBy("lock") private Exception closeException;
 
         private class PendingOps {
             final SelectionKey selectionKey;
@@ -219,7 +210,7 @@ public class TcpReactor implements Closeable {
             }
         }
 
-        TcpSelector(Selector selector, ThreadFactory threadFactory, String threadName) {
+        protected TcpSelector(Selector selector, ThreadFactory threadFactory, String threadName) {
             this.selector = selector;
 
             tcpSelectorThread = threadFactory.newThread(this);
@@ -228,12 +219,8 @@ public class TcpReactor implements Closeable {
             tcpSelectorThread.start();
         }
 
-        protected TcpReactor getReactor() {
-            return TcpReactor.this;
-        }
-
-        Set<Thread> getTcpSelectorThreads() {
-            return tcpSelectorThreads;
+        protected Set<Thread> getTcpReactorThreads() {
+            return tcpReactorThreads;
         }
         
         /**
@@ -246,9 +233,9 @@ public class TcpReactor implements Closeable {
          * @throws
          *          IOException if the TcpReactor has already been closed
          */
-        void asyncRegisterTcpEndPoint(TcpEndPoint tcpEndPoint) throws IOException {
+        protected void asyncRegisterTcpEndPoint(TcpEndPoint tcpEndPoint) throws IOException {
             synchronized (lock) {
-                if (closed) {
+                if (closeException != null) {
                     throw new IOException("TcpReactor is already closed.");
                 }
 
@@ -258,27 +245,20 @@ public class TcpReactor implements Closeable {
             selector.wakeup();
         }
 
-        void asyncAddTcpReadChannel(TcpClient tcpClient, Runnable channelReadyCallback) throws IOException {
+        protected void asyncAddTcpChannelCallback(TcpClient tcpClient,
+                TcpChannel.ChannelType channelType, Runnable channelReadyCallback) throws IOException {
             synchronized (lock) {
-                if (closed) {
-                    throw new IOException("Cannot add ReadChannel. Cause: TcpReactor is already closed.");
+                if (closeException != null) {
+                    throw new IOException("Cannot add TcpChannel callback. Cause: TcpReactor is already closed.");
                 }
 
-                asyncAddTcpReadClients.add(tcpClient);
-                asyncAddTcpReadCallbacks.add(channelReadyCallback);
-            }
-
-            selector.wakeup();
-        }
-
-        void asyncAddTcpWriteChannel(TcpClient tcpClient, Runnable channelReadyCallback) throws IOException {
-            synchronized (lock) {
-                if (closed) {
-                    throw new IOException("Cannot add WriteChannel. Cause: TcpReactor is already closed.");
+                if (channelType == TcpChannel.ChannelType.Read) {
+                    asyncAddTcpReadClients.add(tcpClient);
+                    asyncAddTcpReadCallbacks.add(channelReadyCallback);
+                } else {
+                    asyncAddTcpWriteClients.add(tcpClient);
+                    asyncAddTcpWriteCallbacks.add(channelReadyCallback);
                 }
-
-                asyncAddTcpWriteClients.add(tcpClient);
-                asyncAddTcpWriteCallbacks.add(channelReadyCallback);
             }
 
             selector.wakeup();
@@ -293,9 +273,9 @@ public class TcpReactor implements Closeable {
          * @param optionalReason
          *          If there was an exception which resulted in the endpoint being closed, null otherwise
          */
-        void asyncUnregisterTcpEndPoint(TcpEndPoint tcpEndPoint, Exception optionalReason) throws IOException {
+        protected void asyncUnregisterTcpEndPoint(TcpEndPoint tcpEndPoint, Exception optionalReason) throws IOException {
             synchronized (lock) {
-                if (closed) {
+                if (closeException != null) {
                     throw new IOException("Cannot unregister EndPoint. Cause: TcpReactor is already closed.");
                 }
 
@@ -315,7 +295,7 @@ public class TcpReactor implements Closeable {
             List<Runnable> addTcpWriteCallbacks;
 
             synchronized (lock) {
-                if (closed) {
+                if (closeException != null) {
                     return false;
                 }
 
@@ -454,8 +434,12 @@ public class TcpReactor implements Closeable {
 
                     // rest of the clients (shrinking their interestOps)
                     for (Iterator<SelectionKey> selectionKeyIter = selectedKeys.iterator(); selectionKeyIter.hasNext();) {
-                        ((TcpClient) selectionKeyIter.next().attachment()).syncUpdateInterestOps();
-                        selectionKeyIter.remove();
+                        SelectionKey selectionKey = selectionKeyIter.next();
+
+                        if (selectionKey.isValid()) {
+                            ((TcpClient) selectionKey.attachment()).syncUpdateInterestOps();
+                            selectionKeyIter.remove();
+                        }
                     }
 
                     startSelectionNano = System.nanoTime();
@@ -486,8 +470,9 @@ public class TcpReactor implements Closeable {
                                 tcpSelector.asyncRegisterTcpEndPoint(
                                     new TcpClient(socketChannel, tcpSelector, (TcpServer) selectionKey.attachment()));
                             } catch (Exception e) {
-                                // e.printStackTrace();
-                                // server failed to accept connection ... this should be surfaced for ddos scenarios
+                                // 1. server failed to accept connection -- if its channel is closed it will be
+                                // unregistered the next cycle
+                                // 2. or the next selector is closed -- reactor is then closed so no point in surfacing
                             }
                             continue;
                         }
@@ -530,7 +515,7 @@ public class TcpReactor implements Closeable {
          * @param selectionKey the key for which we need the new interest ops
          */
         // Most likely will go away
-        void asyncPauseInterestOps(SelectionKey selectionKey, int interestOps, long resumeTimestamp) {
+        private void asyncPauseInterestOps(SelectionKey selectionKey, int interestOps, long resumeTimestamp) {
             synchronized (lock) {
                 try {
                     pausingInterestOps.add(new PendingOps(selectionKey, interestOps, resumeTimestamp));
@@ -551,7 +536,7 @@ public class TcpReactor implements Closeable {
          * @param selectionKey the key for which we need the new interest ops
          */
         // Most likely will go away
-        void asyncResumeInterestOps(SelectionKey selectionKey, int interestOps) {
+        private void asyncResumeInterestOps(SelectionKey selectionKey, int interestOps) {
             synchronized (lock) {
                 try {
                     resumingInterestOps.add(new PendingOps(selectionKey, interestOps, 0));
@@ -565,39 +550,38 @@ public class TcpReactor implements Closeable {
             selector.wakeup();
         }
 
-        void requestClose(@Nullable Exception optionalException) {
+        protected void requestClose(Exception exception) {
             synchronized (lock) {
-                if (closed) {
+                if (closeException != null) {
                     return;
                 }
 
-                closed = true;
-                fatalException = optionalException;
+                closeException = exception;
             }
 
             selector.wakeup();
         }
 
-        void handleSelectedKeyException(Exception e) {
+        protected void handleSelectedKeyException(Exception e) {
             // AOP wraps this call when debugging
         }
 
-        void handleSelectException(Exception e) {
+        protected void handleSelectException(Exception e) {
             // AOP wraps this call when debugging and the argument e provides useful info
             close(); // bubble up the fatal exception by asking the broker to close
         }
 
         /**
-         * The component is already in closed state, with no way to pass any exceptions to its user. That's why we silence
-         * all exceptions here. Always called by the same tcpSelectorThread, servicing this instance.
+         * The component is already in closed state, with no way to pass any exceptions to its user. That's why we
+         * silence all exceptions here. Always called by the same tcpSelectorThread, servicing this instance.
          */
-        private void syncClose() {
+        protected void syncClose() {
             for (SelectionKey selectionKey : selector.keys()) {
-                ((TcpEndPoint) selectionKey.attachment()).syncHandleUnregistration(fatalException);
+                ((TcpEndPoint) selectionKey.attachment()).syncHandleUnregistration(closeException);
             }
 
             for (TcpEndPoint tcpEndPoint : asyncRegisterTcpEndPoints) {
-                tcpEndPoint.syncHandleUnregistration(fatalException);
+                tcpEndPoint.syncHandleUnregistration(closeException);
             }
 
             try {

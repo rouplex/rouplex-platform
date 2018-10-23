@@ -122,12 +122,6 @@ public class TcpBufferedWriteChannel extends TcpWriteChannel {
     }
 
     private final TcpWriteChannel writeChannel;
-    private final boolean useDirectBuffers;
-    private final boolean onlyAsync;
-
-    @GuardedBy("lock") private int desiredBufferSize;
-    @GuardedBy("lock") private ByteBuffer byteBuffer;
-    @GuardedBy("lock") private boolean shutdownRequested;
     @GuardedBy("lock") private IOException pendingException;
 
     private final Runnable pump = new Runnable() {
@@ -154,42 +148,8 @@ public class TcpBufferedWriteChannel extends TcpWriteChannel {
     };
 
     protected TcpBufferedWriteChannel(TcpBufferedWriteChannelBuilder builder) {
-        super(builder.writeChannel.getTcpClient(), builder.bufferSize);
-
+        super(builder.writeChannel.getTcpClient());
         this.writeChannel = builder.writeChannel;
-        this.onlyAsync = builder.onlyAsync;
-        this.desiredBufferSize = builder.bufferSize;
-        this.useDirectBuffers = builder.useDirectBuffers;
-        this.byteBuffer = builder.useDirectBuffers
-            ? ByteBuffer.allocateDirect(desiredBufferSize)
-            : ByteBuffer.allocate(desiredBufferSize);
-    }
-
-    public void setBufferSize(int bufferSize) {
-        synchronized (writeChannel) {
-            desiredBufferSize = bufferSize;
-            ensureBufferSize();
-        }
-    }
-
-    public int getBufferSize() {
-        synchronized (writeChannel) {
-            return desiredBufferSize != 0 ? desiredBufferSize : byteBuffer.capacity();
-        }
-    }
-
-    @GuardedBy("lock")
-    private void ensureBufferSize() {
-        if (desiredBufferSize != 0 && byteBuffer.position() <= desiredBufferSize) {
-            ByteBuffer newByteBuffer = useDirectBuffers
-                ? ByteBuffer.allocateDirect(desiredBufferSize)
-                : ByteBuffer.allocate(desiredBufferSize);
-
-            byteBuffer.flip();
-            BufferUtils.transfer(byteBuffer, newByteBuffer);
-            byteBuffer = newByteBuffer;
-            desiredBufferSize = 0;
-        }
     }
 
     @Override
@@ -209,7 +169,7 @@ public class TcpBufferedWriteChannel extends TcpWriteChannel {
 
             int copied;
             if (byteBuffer.position() == 0) {
-                if (!onlyAsync) {
+                if (!onlyAsyncReadWrite) {
                     writeChannel.write(bb);
                 }
 
