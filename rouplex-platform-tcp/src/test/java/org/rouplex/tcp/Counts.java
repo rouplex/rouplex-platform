@@ -1,4 +1,4 @@
-package org.rouplex;
+package org.rouplex.tcp;
 
 import java.util.concurrent.atomic.AtomicInteger;
 

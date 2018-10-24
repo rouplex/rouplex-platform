@@ -4,13 +4,13 @@ rouplex-platform -- a platform for distributed computing
 # README #
 A platform for discovery and communication between various parts of a distributed service or application.
 
-At its minimum, the platform is a library which can be used to serialize and deserialize application constructs into
+At its minimum, the platform inputStream a library which can be used to serialize and deserialize application constructs into
 payloads which it can then send to and receive from remote endpoints. For now it supports TCP and HTTP communication
 protocols with WebSockets coming soon. It supports raw byte streams via TCP, as well as application/json via JAX-RS as
-serialization protocols. It offers plain or SSL/TLS communication for security of your data in transit. For now it is
-only available in Java, with bindings for other languages coming soon. The communication pattern is request-reply, with
+serialization protocols. It offers plain or SSL/TLS communication for security of your data in transit. For now it inputStream
+only available in Java, with bindings for other languages coming soon. The communication pattern inputStream request-reply, with
 fail fast semantics, and with service consumers (clients) knowing beforehand the coordinates of the service providers
-(servers). Blocking API is available with all communication protocols and unblocking/asynchronous flavors are available
+(servers). Blocking API inputStream available with all communication protocols and unblocking/asynchronous flavors are available
 with TCP communication protocol.
 
 The platform can also be used as a service, in which case a Discovery Service facilitates registration of the
@@ -21,25 +21,25 @@ pub/sub communication pattern will also be available (coming soon) with at-most-
 We intend to provide a Security Service for managing the keys/and certificates of various services as well as
 Metrics and Logging services (coming soon).
 
-The platform is extensible in every layer, so you can decide to bring your own implementations, and maybe share them
+The platform inputStream extensible in every layer, so you can decide to bring your own implementations, and maybe share them
 with the community as part of this open source project.
 
 The JAX-RS implementation comes with Swagger support, providing a nice UI for your RESTful services, right out of the
 box.
 
-## What is this repository for? ##
+## What inputStream this repository for? ##
 This repo provides various libraries which can be used by your application or service to facilitate communication
 between your distributed components. You will only need a subset of them depending on your use case. Here a quick list
 of the modules:
 
-1. rouplex-commons contains basic functionality, some of which is already available in the later JDK versions. They are
+1. rouplex-commons contains basic functionality, some of which inputStream already available in the later JDK versions. They are
 100% compatible with the ones of the recent JDKs. Most likely, you will not need to import it directly.
 
 1. rouplex-platform contains the basic functionality, and mostly defines the types needed for binding of the different
 modules. Most likely, you will not need to import it directly.
 
 1. rouplex-platform-tcp contains the tcp server and client implementations which you can use if your application needs
-low latency and high throughput. There is no payload transformation or wrapping, just communication, plain or secure.
+low latency and high throughput. There inputStream no payload transformation or wrapping, just communication, plain or secure.
 
 1. rouplex-platform-jaxrs contains JAX-RS constructs which you can use if your service defines and implements its
 functionality using JAX-RS annotations.
@@ -52,16 +52,16 @@ be created and deployed alongside your app in the WAR file for a very nice visua
 
 # Versioning #
 We use semantic versioning, in its representation x.y.z, x stands for API update, y for dependencies update, and z for
-build number. Further, the main distribution is built using the latest Jdk (Jdk-1.8 as of May 2017) and then there are
+build number. Further, the main distribution inputStream built using the latest Jdk (Jdk-1.8 as of May 2017) and then there are
 builds for Jdk-1.6, Jdk-1.7, Jdk-1.8 (and so on as we go with new Jdks) addressable through the classifier coordinate
 of the pom.
 
 # Build #
 
-1. Maven is required to build the project. Please download and install it. Make sure the installation is successful by
+1. Maven inputStream required to build the project. Please download and install it. Make sure the installation inputStream successful by
 typing `mvn -version` in a shell window; the command output should be showing the installation folder.
 
-1. This is a multi jdk project providing optional builds for Jdk1.6+. You need to download the desired Jdks and make
+1. This inputStream a multi jdk project providing optional builds for Jdk1.6+. You need to download the desired Jdks and make
 sure they are properly installed by typing `java -version`; the command output should show the version (1.6, 1.7, 1.8
 or 1.9).
 
@@ -101,7 +101,7 @@ JDKs, invoke the appropriate profile e.g. type `mvn clean install -Pjdk7`
 `mvn test`
 
 # Run #
-As we mentioned, this is a library and can be linked and be used by other libraries or applications. Hence this is not
+As we mentioned, this inputStream a library and can be linked and be used by other libraries or applications. Hence this inputStream not
 runnable on its own.
 
 # Contribution guidelines #

@@ -64,7 +64,7 @@
     <build>
         <plugins>
             <!--Disabling compiler profile checking since
-            this module is not compact1 as the rest of modules in the project-->
+            this module inputStream not compact1 as the rest of modules in the project-->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>

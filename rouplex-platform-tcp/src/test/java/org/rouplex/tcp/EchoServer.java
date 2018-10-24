@@ -1,35 +1,42 @@
-package org.rouplex;
+package org.rouplex.tcp;
 
-import org.junit.Assert;
 import org.rouplex.platform.tcp.TcpClient;
 import org.rouplex.platform.tcp.TcpClientListener;
 import org.rouplex.platform.tcp.TcpReactor;
 import org.rouplex.platform.tcp.TcpServer;
 
+import java.io.Closeable;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class EchoServer {
-    final Counts counts = new Counts("server");
+class EchoServer implements Closeable {
+    protected final Counts counts = new Counts("server");
+    protected final TcpServer tcpServer;
 
-    EchoServer(
+    protected EchoServer(
             TcpReactor tcpReactor,
+            int localPort,
             boolean useExecutor,
             int readBufferSize,
             int writeBufferSize,
             final boolean onlyAsyncRW,
             final int callbackOffenderCount,
-            int backlog
-    ) throws Exception {
+            int backlog,
+            int echoResponderBufferSize,
+            boolean useServerExecutor
+            ) throws Exception {
+
         final AtomicInteger sessionId = new AtomicInteger();
         TcpServer.Builder tcpServerBuilder = new TcpServer.Builder(tcpReactor) {{
             withOnlyAsyncReadWrite(onlyAsyncRW);
         }}
                 .withReadBufferSize(readBufferSize)
                 .withWriteBufferSize(writeBufferSize)
-                .withLocalAddress("localhost", 7777)
+                .withLocalAddress("localhost", localPort)
                 .withBacklog(backlog)
                 .withTcpClientListener(new TcpClientListener() {
                     @Override
@@ -41,7 +48,7 @@ public class EchoServer {
 
                         if (sid < callbackOffenderCount) try {
                             report(String.format("%s connected, now delaying", tcpClient.getDebugId()));
-                            Thread.sleep(1000);
+                            Thread.sleep(10000);
                         } catch (InterruptedException ie) {
                             report("Interrupted");
                         }
@@ -49,7 +56,7 @@ public class EchoServer {
                             report(String.format("%s connected", tcpClient.getDebugId()));
                         }
 
-                        new Echoer(tcpClient, counts).read(true, true);
+                        new EchoResponder(tcpClient, counts, echoResponderBufferSize, useServerExecutor).start();
                     }
 
                     @Override
@@ -75,10 +82,20 @@ public class EchoServer {
             tcpServerBuilder.withEventsExecutor(null);
         }
 
-        tcpServerBuilder.build().bind();
+        tcpServer = tcpServerBuilder.build();
+        tcpServer.bind();
+    }
+
+    InetSocketAddress getInetSocketAddress() throws IOException {
+         return (InetSocketAddress) tcpServer.getLocalAddress();
     }
 
     private static void report(String log) {
         System.out.println(String.format("%s %s %s", System.currentTimeMillis(), Thread.currentThread(), log));
+    }
+
+    @Override
+    public void close() throws IOException {
+        tcpServer.close();
     }
 }
