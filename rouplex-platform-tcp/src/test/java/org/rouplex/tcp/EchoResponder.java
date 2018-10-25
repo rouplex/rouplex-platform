@@ -13,8 +13,8 @@ class EchoResponder extends EchoAbstract {
     protected final boolean useExecutor;
     protected boolean readEos;
 
-    protected EchoResponder(TcpClient tcpClient, Counts counts, int bufferSize, boolean useExecutor) {
-        super(tcpClient, counts);
+    protected EchoResponder(TcpClient tcpClient, EchoCounts echoCounts, int bufferSize, boolean useExecutor) {
+        super(tcpClient, echoCounts);
         this.byteBuffer = ByteBuffer.allocate(bufferSize);
         this.useExecutor = useExecutor;
     }
@@ -34,7 +34,7 @@ class EchoResponder extends EchoAbstract {
             try {
                 read = tcpClient.getReadChannel().read(byteBuffer);
             } catch (IOException ioe) {
-                counts.failedRead.incrementAndGet();
+                echoCounts.failedRead.incrementAndGet();
                 // by default the tcpClient gets closed on exceptions, nothing to do here
                 report(String.format("%s threw exception [%s]", tcpClient.getDebugId(), ioe.getMessage()));
                 return;
@@ -44,7 +44,7 @@ class EchoResponder extends EchoAbstract {
                 switch (read) {
                     case -1:
                         readEos = true;
-                        counts.receivedEos.incrementAndGet();
+                        echoCounts.receivedEos.incrementAndGet();
                         report(String.format("%s received eos", tcpClient.getDebugId()));
                         if (byteBuffer.position() == 0) {
                             // by default the tcpClient gets closed on both eos, nothing to do here
@@ -96,7 +96,7 @@ class EchoResponder extends EchoAbstract {
             try {
                 written = tcpClient.getWriteChannel().write(byteBuffer);
             } catch (Exception ioe) {
-                counts.failedWrite.incrementAndGet();
+                echoCounts.failedWrite.incrementAndGet();
                 // by default the tcpClient gets closed on exceptions, nothing to do here
                 report(String.format("%s threw exception [%s]", tcpClient.getDebugId(), ioe.getMessage()));
                 return;

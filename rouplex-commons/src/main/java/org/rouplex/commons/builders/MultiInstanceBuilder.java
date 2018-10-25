@@ -23,6 +23,12 @@ public abstract class MultiInstanceBuilder<T, B extends MultiInstanceBuilder> {
         builder = (B) this;
     }
 
+    /**
+     * Override this method to perform checks for needed values for the instance of type T to be built
+     */
+    protected abstract void checkCanBuild();
+    public abstract T build() throws Exception;
+
     public B withAttachment(@Nullable Object attachment) {
         this.attachment = attachment;
         return builder;
@@ -31,10 +37,4 @@ public abstract class MultiInstanceBuilder<T, B extends MultiInstanceBuilder> {
     public Object getAttachment() {
         return attachment;
     }
-
-    /**
-     * Override this method to perform checks for needed values for the instance of type T to be built
-     */
-    protected abstract void checkCanBuild();
-    public abstract T build() throws Exception;
 }

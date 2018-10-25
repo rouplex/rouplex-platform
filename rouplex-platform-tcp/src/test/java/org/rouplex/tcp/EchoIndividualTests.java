@@ -6,30 +6,30 @@ import org.rouplex.platform.tcp.TcpReactor;
 
 import java.util.concurrent.TimeUnit;
 
-public class IndividualEchoTests {
+public class EchoIndividualTests {
 
     /**
      * Success with:
-     *  Shared tcpReactor, one selector thread, one client, synchronous callbacks, behaved on callbacks, no buffering,
-     *  20 bytes exchange
+     *  Shared/Any tcpReactor, one/any selector thread, one/any client, synchronous/asynchronous callbacks, behaved on
+     *  callbacks, no/any buffering, 20/any bytes exchange
      */
     @Test
-    public void test1SimplestUseCase() throws Exception {
+    public void test1_SimplestUseCase() throws Exception {
         TcpReactor tcpReactor = new TcpReactor.Builder().withThreadCount(1).build();
 
         EchoServer echoServer = new EchoServer(tcpReactor, 0, false, 0, 0, false, 0, 0, 1000, false);
         EchoClientGroup echoClientGroup = new EchoClientGroup(tcpReactor, echoServer.getInetSocketAddress().getPort(), 1, false, 0, 0, false, 0, 20, 1000, 0);
 
         echoClientGroup.connectionEvents.await(1, TimeUnit.SECONDS);
-        echoClientGroup.counts.report();
-        echoServer.counts.report();
+        echoClientGroup.echoCounts.report();
+        echoServer.echoCounts.report();
 
         Assert.assertEquals(0, echoClientGroup.connectionEvents.getCount());
     }
 
     /**
      * Failure with:
-     *  1 tcpReactor thread, 2 clients, synchronous callbacks, server or client non-behaved on callbacks
+     *  1 tcpReactor thread, 2 clients, synchronous callbacks, server/client non-behaved on callbacks
      *
      * When:
      *  The server is not using the executor
@@ -43,7 +43,7 @@ public class IndividualEchoTests {
      *  Blocked on first session, the server cannot handle the second session
      */
     @Test(expected = AssertionError.class)
-    public void test2LongCallbackFailure() throws Exception {
+    public void test2_LongCallbackFailure() throws Exception {
         TcpReactor tcpServerReactor = new TcpReactor.Builder().withThreadCount(1).build();
         TcpReactor tcpClientReactor = new TcpReactor.Builder().withThreadCount(1).build();
 
@@ -52,15 +52,15 @@ public class IndividualEchoTests {
         EchoClientGroup echoClientGroup = new EchoClientGroup(tcpClientReactor, echoServer.getInetSocketAddress().getPort(), 2, false, callbackOffenderCount, 0, false, 0, 20, 1000, 0);
 
         echoClientGroup.connectionEvents.await(1, TimeUnit.SECONDS);
-        echoClientGroup.counts.report();
-        echoServer.counts.report();
+        echoClientGroup.echoCounts.report();
+        echoServer.echoCounts.report();
 
         Assert.assertEquals(1, echoClientGroup.connectionEvents.getCount());
     }
 
     /**
      * Success fixing failure of test2LongCallbackFailure with:
-     *  2 tcpReactor threads, 2 clients, synchronous callbacks, server or client non-behaved on callbacks
+     *  2 tcpReactor threads, 2 clients, synchronous callbacks, server/client non-behaved on callbacks
      *
      * When:
      *  The server is not using the executor
@@ -87,15 +87,15 @@ public class IndividualEchoTests {
         EchoClientGroup echoClientGroup = new EchoClientGroup(tcpClientReactor, echoServer.getInetSocketAddress().getPort(), 2, false, callbackOffenderCount, 0, false, 0, 20, 1000, 0);
 
         echoClientGroup.connectionEvents.await(1, TimeUnit.SECONDS);
-        echoClientGroup.counts.report();
-        echoServer.counts.report();
+        echoClientGroup.echoCounts.report();
+        echoServer.echoCounts.report();
 
         Assert.assertEquals(1, echoClientGroup.connectionEvents.getCount());
     }
 
     /**
      * Success fixing failure of test2LongCallbackFailure with:
-     *  2 clients, asynchronous callbacks, server or client non-behaved on callbacks
+     *  2 clients, asynchronous callbacks, server/client non-behaved on callbacks
      *
      * When:
      *  The server is using the executor
@@ -122,8 +122,8 @@ public class IndividualEchoTests {
         EchoClientGroup echoClientGroup = new EchoClientGroup(tcpClientReactor, echoServer.getInetSocketAddress().getPort(), 2, false, callbackOffenderCount, 0, false, 0, 20, 1000, 0);
 
         echoClientGroup.connectionEvents.await(1, TimeUnit.SECONDS);
-        echoClientGroup.counts.report();
-        echoServer.counts.report();
+        echoClientGroup.echoCounts.report();
+        echoServer.echoCounts.report();
 
         Assert.assertEquals(1, echoClientGroup.connectionEvents.getCount());
     }
@@ -144,15 +144,15 @@ public class IndividualEchoTests {
      *  due to implementation of TcpServer
      */
     @Test(expected = AssertionError.class)
-    public void test3StackOverflowFailure() throws Exception {
+    public void test3_StackOverflowFailure() throws Exception {
         TcpReactor tcpReactor = new TcpReactor.Builder().withThreadCount(1).build();
 
         EchoServer echoServer = new EchoServer(tcpReactor, 0, true, 0, 0, false, 0, 0, 1, false);
         EchoClientGroup echoClientGroup = new EchoClientGroup(tcpReactor, echoServer.getInetSocketAddress().getPort(), 1, false, 0, 0, false, 0, 10000, 1000, 0);
         echoClientGroup.connectionEvents.await(1, TimeUnit.SECONDS);
 
-        echoClientGroup.counts.report();
-        echoServer.counts.report();
+        echoClientGroup.echoCounts.report();
+        echoServer.echoCounts.report();
 
         Assert.assertEquals(0, echoClientGroup.connectionEvents.getCount());
     }
@@ -178,8 +178,8 @@ public class IndividualEchoTests {
         EchoClientGroup echoClientGroup = new EchoClientGroup(tcpReactor, echoServer.getInetSocketAddress().getPort(), 1, false, 0, 0, false, 0, 10000, 1000, 0);
         echoClientGroup.connectionEvents.await(1, TimeUnit.SECONDS);
 
-        echoClientGroup.counts.report();
-        echoServer.counts.report();
+        echoClientGroup.echoCounts.report();
+        echoServer.echoCounts.report();
 
         Assert.assertEquals(0, echoClientGroup.connectionEvents.getCount());
     }

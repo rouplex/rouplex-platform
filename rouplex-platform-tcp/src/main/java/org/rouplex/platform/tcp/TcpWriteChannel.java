@@ -20,6 +20,7 @@ public class TcpWriteChannel extends TcpChannel implements ReactiveWriteChannel 
 
     @GuardedBy("lock") protected boolean shutdownRequested;
 
+    // Only used when buffering is enabled
     private final Runnable writeToChannelThenNotify = new Runnable() {
         @Override
         public void run() {
@@ -51,12 +52,14 @@ public class TcpWriteChannel extends TcpChannel implements ReactiveWriteChannel 
                 try {
                     shutdownSocketChannelAndHandleEos();
                 } catch (IOException ioe) {
-//                  By default the TcpEndPoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION is set, so the TcpClient will
-//                  be disconnected and the client will be fired the new event
-//                  If TcpEndPoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION flag has been unset, then this exception
-//                  will be lost, and without a way to tell the user about it. This is true in the classic socket
-//                  channels as well, and the reason that any communication must be deemed successful upon receiving
-//                  EOS from the read channel
+                    /*
+                      By default the TcpEndPoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION is set, so the TcpClient will
+                      be disconnected and the client will be fired the new event
+                      If TcpEndPoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION flag has been unset, then this exception
+                      will be lost, and without a way to tell the user about it. This is true in the classic socket
+                      channels as well, and the reason that any communication must be deemed successful upon receiving
+                      EOS from the read channel
+                    */
                 }
             }
         }
@@ -115,34 +118,27 @@ public class TcpWriteChannel extends TcpChannel implements ReactiveWriteChannel 
 
     @GuardedBy("lock")
     private int writeNonBlocking(ByteBuffer byteBuffer) throws IOException {
+        if (this.byteBuffer == null) {  // no buffering
+            return socketChannel.write(byteBuffer);
+        }
+
         int written;
-        if (this.byteBuffer == null) {
-            written = socketChannel.write(byteBuffer);
-        }
-        else if (onlyAsyncReadWrite) {
-            if (this.byteBuffer.position() == 0) {
-                if ((written = BufferUtils.transfer(byteBuffer, this.byteBuffer)) != 0) {
-                    addChannelReadyCallback(writeToChannelThenNotify);
-                }
-            } else {
-                written = BufferUtils.transfer(byteBuffer, this.byteBuffer);
-            }
-        }
-        else {
-            boolean writeCallbackAlreadySet;
-            if (writeCallbackAlreadySet = this.byteBuffer.position() != 0) {
+        if (onlyAsyncReadWrite) {
+            written = BufferUtils.transfer(byteBuffer, this.byteBuffer);
+        } else {
+            if (this.byteBuffer.position() != 0) {
+                // flush not empty this.byteBuffer
+                this.byteBuffer.flip();
                 socketChannel.write(this.byteBuffer);
+                this.byteBuffer.compact();
             }
 
             written = this.byteBuffer.position() == 0 ? socketChannel.write(byteBuffer) : 0;
+            written += BufferUtils.transfer(byteBuffer, this.byteBuffer);
+        }
 
-            if (byteBuffer.hasRemaining()) {
-                written += BufferUtils.transfer(byteBuffer, this.byteBuffer);
-
-                if (!writeCallbackAlreadySet) {
-                    addChannelReadyCallback(writeToChannelThenNotify);
-                }
-            }
+        if (this.byteBuffer.position() != 0) {
+            addChannelReadyCallback(writeToChannelThenNotify);
         }
 
         return written;

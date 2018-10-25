@@ -16,7 +16,7 @@ import java.nio.ByteBuffer;
 public class TcpReadChannel extends TcpChannel implements ReactiveReadChannel {
     private final ByteBuffer oneByteBB = ByteBuffer.allocate(1);
 
-    TcpReadChannel(TcpClient tcpClient) {
+    protected TcpReadChannel(TcpClient tcpClient) {
         super(tcpClient, ChannelType.Read);
     }
 

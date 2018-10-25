@@ -255,8 +255,8 @@
             </properties>
 
             <modules>
-                <!--Servlet 4.0 and up are not available in jdk1.6-->
-                <module>rouplex-servlet-container-v3</module>
+                <!--jdk1.6 only supported by servlet 2.5-->
+                <module>rouplex-servlet-container-v2_5</module>
             </modules>
         </profile>
 
@@ -276,7 +276,7 @@
             </properties>
 
             <modules>
-                <module>rouplex-servlet-container-v4</module>
+                <module>rouplex-servlet-container-v3</module>
             </modules>
         </profile>
 

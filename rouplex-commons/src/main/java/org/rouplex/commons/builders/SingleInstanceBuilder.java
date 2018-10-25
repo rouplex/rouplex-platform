@@ -24,6 +24,12 @@ public abstract class SingleInstanceBuilder<T, B extends SingleInstanceBuilder> 
         builder = (B) this;
     }
 
+    /**
+     * Override this method to perform checks for needed values for the instance of type T to be built
+     */
+    protected abstract void checkCanBuild();
+    public abstract T build() throws Exception;
+
     public B withAttachment(@Nullable Object attachment) {
         this.attachment = attachment;
         return builder;
@@ -49,9 +55,8 @@ public abstract class SingleInstanceBuilder<T, B extends SingleInstanceBuilder> 
         builder = null;
     }
 
-    /**
-     * Override this method to perform checks for needed values for the instance of type T to be built
-     */
-    protected abstract void checkCanBuild();
-    public abstract T build() throws Exception;
+    protected B cloneInto(B builder) {
+        builder.attachment = attachment;
+        return builder;
+    }
 }

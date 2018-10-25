@@ -200,7 +200,6 @@ public class TcpClient extends TcpEndPoint {
     protected final TcpReadChannel tcpReadChannel;
     protected final TcpWriteChannel tcpWriteChannel;
 
-    @GuardedBy("lock") protected TcpEndPointBuilder builder;
     @GuardedBy("no-need-guarding") private int interestOps;
     @GuardedBy("no-need-guarding") private boolean unregistrationHandled;
 
@@ -214,31 +213,40 @@ public class TcpClient extends TcpEndPoint {
      */
     protected TcpClient(TcpClientBuilder builder) {
         this(builder.selectableChannel, builder.tcpSelector, builder, null, builder.tcpClientListener);
-        attachment = builder.getAttachment();
     }
 
     /**
      * Construct an instance by wrapping a {@link SocketChannel} obtained via a {@link ServerSocketChannel#accept()}.
      *
-     * @param socketChannel        The underlying channel to use for reading and writing to the network
-     * @param tcpSelector          The tcpSelector wrapping the {@link Selector} used to register the channel
-     * @param originatingTcpServer The originatingTcpServer which accepted the underlying channel
+     * @param socketChannel
+     *          The underlying channel to use for reading and writing to the network
+     * @param tcpSelector
+     *          The tcpSelector wrapping the {@link Selector} used to register the channel
+     * @param originatingTcpServer
+     *          The originatingTcpServer which accepted the underlying channel
      */
     protected TcpClient(SocketChannel socketChannel, TcpReactor.TcpSelector tcpSelector, TcpServer originatingTcpServer) {
-        this(socketChannel, tcpSelector, originatingTcpServer.builder, originatingTcpServer, originatingTcpServer.tcpClientListener);
+        this(socketChannel, tcpSelector, originatingTcpServer.builder,
+                originatingTcpServer, originatingTcpServer.tcpClientListener);
     }
 
-    protected TcpClient(
-            SelectableChannel socketChannel,
-            TcpReactor.TcpSelector tcpSelector,
-            TcpEndPointBuilder builder,
-            TcpServer originatingTcpServer,
-            TcpClientListener tcpClientListener) {
-        super(socketChannel, tcpSelector, builder);
+    /**
+     * Factored constructor
+     *
+     * @param selectableChannel
+     *          The underlying channel to use for accepting, reading and writing to the network
+     * @param tcpSelector
+     *          The tcpSelector wrapping the {@link Selector} used to register the channel
+     * @param builder
+     *          The builder to be used for additional settings inherited from {@link TcpServer}
+     */
+    private TcpClient(SelectableChannel selectableChannel, TcpReactor.TcpSelector tcpSelector,
+                      TcpEndPointBuilder builder, TcpServer originatingTcpServer, TcpClientListener tcpClientListener) {
+        super(selectableChannel, tcpSelector, builder);
 
-        this.builder = builder;
         this.originatingTcpServer = originatingTcpServer;
         this.tcpClientListener = tcpClientListener;
+
         tcpSelectorThread = tcpSelector.tcpSelectorThread;
         tcpReadChannel = new TcpReadChannel(this);
         tcpWriteChannel = new TcpWriteChannel(this);
@@ -255,17 +263,17 @@ public class TcpClient extends TcpEndPoint {
                 throw new IOException("Client is already " + (open ? "connected" : closed ? "closed" : "connecting"));
             }
 
-            TcpClientBuilder builder = (TcpClientBuilder) this.builder;
-            this.builder = null;
+            TcpClientBuilder tcpClientBuilder = (TcpClientBuilder) builder;
+            builder = null;
 
             SocketChannel socketChannel = (SocketChannel) selectableChannel;
             if (!socketChannel.isConnectionPending() && !socketChannel.isConnected()) {
                 socketChannel.configureBlocking(false);
-                socketChannel.connect(builder.remoteAddress);
+                socketChannel.connect(tcpClientBuilder.remoteAddress);
             }
 
-            expirationTimestamp = builder.connectTimeoutMillis == -1
-                    ? -1 : System.currentTimeMillis() + builder.connectTimeoutMillis;
+            expirationTimestamp = tcpClientBuilder.connectTimeoutMillis == -1
+                    ? -1 : System.currentTimeMillis() + tcpClientBuilder.connectTimeoutMillis;
         }
 
         tcpSelector.asyncRegisterTcpEndPoint(this);
@@ -385,23 +393,21 @@ public class TcpClient extends TcpEndPoint {
             return;
         }
 
-        if (eventsExecutor == null) {
-            try {
-                tcpClientListener.onConnected(TcpClient.this);
-            } catch (RuntimeException re) {
-                handleException(AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, true);
-            }
-        } else {
-            eventsExecutor.execute(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        tcpClientListener.onConnected(TcpClient.this);
-                    } catch (RuntimeException re) {
-                        handleException(AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, false);
-                    }
+        Runnable onConnected = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    tcpClientListener.onConnected(TcpClient.this);
+                } catch (RuntimeException re) {
+                    handleException(AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, false);
                 }
-            });
+            }
+        };
+
+        if (eventsExecutor == null) {
+            onConnected.run();
+        } else {
+            eventsExecutor.execute(onConnected);
         }
     }
 
@@ -445,46 +451,46 @@ public class TcpClient extends TcpEndPoint {
             // RuntimeException from client handling notification -- nothing we can do at this stage
         }
 
-        if (tcpClientListener != null) {
-            if (open) {
-                if (eventsExecutor != null) {
-                    eventsExecutor.execute(new Runnable() {
-                        @Override
-                        public void run() {
-                            try {
-                                tcpClientListener.onDisconnected(TcpClient.this, finalException);
-                            } catch (RuntimeException re) {
-                                // RuntimeException from client handling notification -- nothing we can do at this stage
-                            }
-                        }
-                    });
-                } else {
+        if (tcpClientListener == null) {
+            return;
+        }
+
+        if (open) {
+            Runnable onDisconnected = new Runnable() {
+                @Override
+                public void run() {
                     try {
-                        tcpClientListener.onDisconnected(this, finalException);
+                        tcpClientListener.onDisconnected(TcpClient.this, finalException);
                     } catch (RuntimeException re) {
                         // RuntimeException from client handling notification -- nothing we can do at this stage
                     }
                 }
+            };
+
+            if (eventsExecutor == null) {
+                onDisconnected.run();
             } else {
-                if (eventsExecutor != null) {
-                    eventsExecutor.execute(new Runnable() {
-                        @Override
-                        public void run() {
-                            try {
-                                tcpClientListener.onConnectionFailed(TcpClient.this, finalException);
-                            } catch (RuntimeException re) {
-                                // RuntimeException from client handling notification -- nothing we can do at this stage
-                            }
-                        }
-                    });
-                } else {
-                    try {
-                        tcpClientListener.onConnectionFailed(this, finalException);
-                    } catch (RuntimeException re) {
-                        // RuntimeException from client handling notification -- nothing we can do at this stage
-                    }
+                eventsExecutor.execute(onDisconnected);
+            }
+
+            return;
+        }
+
+        Runnable onConnectionFailed = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    tcpClientListener.onConnectionFailed(TcpClient.this, finalException);
+                } catch (RuntimeException re) {
+                    // RuntimeException from client handling notification -- nothing we can do at this stage
                 }
             }
+        };
+
+        if (eventsExecutor == null) {
+            onConnectionFailed.run();
+        } else {
+            eventsExecutor.execute(onConnectionFailed);
         }
     }
 }

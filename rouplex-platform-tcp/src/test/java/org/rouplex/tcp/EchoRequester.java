@@ -14,9 +14,9 @@ class EchoRequester extends EchoAbstract {
     protected final InputStream inputStream;
     protected final OutputStream outputStream;
 
-    protected EchoRequester(TcpClient tcpClient, Counts counts,
+    protected EchoRequester(TcpClient tcpClient, EchoCounts echoCounts,
                   int echoRequesterBufferSize, InputStream inputStream, @Nullable OutputStream outputStream) {
-        super(tcpClient, counts);
+        super(tcpClient, echoCounts);
 
         writeByteBuffer = ByteBuffer.allocate(echoRequesterBufferSize);
         readByteBuffer = ByteBuffer.allocate(echoRequesterBufferSize);
@@ -57,7 +57,7 @@ class EchoRequester extends EchoAbstract {
         try {
             tcpClient.getWriteChannel().write(writeByteBuffer);
         } catch (Exception ioe) {
-            counts.failedWrite.incrementAndGet();
+            echoCounts.failedWrite.incrementAndGet();
             // by default the tcpClient gets closed on exceptions, nothing to do here
             report(String.format("%s threw exception [%s]", tcpClient.getDebugId(), ioe.getMessage()));
             return;
@@ -85,7 +85,7 @@ class EchoRequester extends EchoAbstract {
         try {
             read = tcpClient.getReadChannel().read(readByteBuffer);
         } catch (IOException ioe) {
-            counts.failedRead.incrementAndGet();
+            echoCounts.failedRead.incrementAndGet();
             // by default the tcpClient gets closed on exceptions, nothing to do here
             report(String.format("%s threw exception [%s]", tcpClient.getDebugId(), ioe.getMessage()));
             return;
@@ -94,7 +94,7 @@ class EchoRequester extends EchoAbstract {
         try {
             switch (read) {
                 case -1:
-                    counts.receivedEos.incrementAndGet();
+                    echoCounts.receivedEos.incrementAndGet();
                     report(String.format("%s received eos", tcpClient.getDebugId()));
                     break;
                 case 0:

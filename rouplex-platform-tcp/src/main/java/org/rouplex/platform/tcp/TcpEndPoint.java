@@ -58,10 +58,16 @@ abstract class TcpEndPoint implements Closeable {
         protected boolean useDirectBuffers;
         protected int autoCloseMask = AutoCloseCondition.ON_ANY_CONDITION.mask;
 
+        protected TcpEndPointBuilder(TcpReactor.TcpSelector tcpSelector) {
+            this.tcpSelector = tcpSelector;
+        }
+
         protected TcpEndPointBuilder(TcpReactor tcpReactor) {
             tcpSelector = tcpReactor.nextTcpSelector();
             eventsExecutor = tcpReactor.eventsExecutor;
         }
+
+        protected abstract void checkLocalAddressSettable();
 
         protected void checkCanBuild() {
             if (!onlyAsyncReadWrite) {
@@ -297,7 +303,18 @@ abstract class TcpEndPoint implements Closeable {
             return builder;
         }
 
-        protected abstract void checkLocalAddressSettable();
+        @Override
+        protected B cloneInto(B builder) {
+            super.cloneInto(builder);
+
+            builder.eventsExecutor = eventsExecutor;
+            builder.useDirectBuffers = useDirectBuffers;
+            builder.readBufferSize = readBufferSize;
+            builder.writeBufferSize = writeBufferSize;
+            builder.onlyAsyncReadWrite = onlyAsyncReadWrite;
+
+            return builder;
+        }
     }
 
     protected final Object lock = new Object();
@@ -305,6 +322,9 @@ abstract class TcpEndPoint implements Closeable {
     protected final SelectableChannel selectableChannel;
     protected final Executor eventsExecutor;
     protected final int autoCloseMask;
+
+    // not final, this is set to null for all tcpClient instances after connecting
+    @GuardedBy("lock") protected TcpEndPointBuilder builder;
 
     // not final, set and changed by user
     @GuardedBy("lock") protected Object attachment;
@@ -323,17 +343,15 @@ abstract class TcpEndPoint implements Closeable {
     /**
      * Constructor to create an endpoint either via the builder or by wrapping a socket channel, such as the one
      * obtained by a {@link ServerSocketChannel#accept()}.
-     *
-     * @param selectableChannel
-     *          The already connected {@link SocketChannel}
-     * @param tcpSelector
-     *          The {@link TcpReactor.TcpSelector} to be used with this socket channel
      */
     protected TcpEndPoint(SelectableChannel selectableChannel, TcpReactor.TcpSelector tcpSelector, TcpEndPointBuilder builder) {
         this.selectableChannel = selectableChannel;
         this.tcpSelector = tcpSelector;
         this.eventsExecutor = builder.eventsExecutor;
         this.autoCloseMask = builder.autoCloseMask;
+        this.attachment = builder.getAttachment();
+
+        this.builder = builder;
     }
 
     abstract void syncHandleRegistration();

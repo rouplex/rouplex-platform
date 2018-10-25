@@ -2,7 +2,7 @@ package org.rouplex.tcp;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class Counts {
+public class EchoCounts {
     final AtomicInteger connectedOk = new AtomicInteger();
     final AtomicInteger failedConnect = new AtomicInteger();
     final AtomicInteger failedWrite = new AtomicInteger();
@@ -16,7 +16,7 @@ public class Counts {
     final AtomicInteger closed = new AtomicInteger();
     final String actor;
 
-    Counts(String actor) {
+    EchoCounts(String actor) {
         this.actor = actor;
     }
 

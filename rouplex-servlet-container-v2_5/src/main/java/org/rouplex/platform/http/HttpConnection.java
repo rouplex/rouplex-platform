@@ -1,8 +1,8 @@
 package org.rouplex.platform.http;
 
-import org.rouplex.platform.io.ReactiveReadChannel;
-import org.rouplex.platform.io.ReactiveWriteChannel;
 import org.rouplex.platform.tcp.TcpClient;
+import org.rouplex.platform.tcp.TcpReadChannel;
+import org.rouplex.platform.tcp.TcpWriteChannel;
 
 import javax.servlet.Servlet;
 import java.io.Closeable;
@@ -14,16 +14,16 @@ import java.nio.ByteBuffer;
  */
 class HttpConnection implements Closeable {
     private final TcpClient tcpClient;
-    private final ReactiveReadChannel readChannel;
-    private final ReactiveWriteChannel writeChannel;
+    private final TcpReadChannel tcpReadChannel;
+    private final TcpWriteChannel tcpWriteChannel;
     private final HttpServer httpServer;
     private ByteBuffer readBuffer = ByteBuffer.allocate(0x10000);
     private Servlet currentServlet;
 
     HttpConnection(TcpClient tcpClient, HttpServer httpServer) {
         this.tcpClient = tcpClient;
-        this.readChannel = tcpClient.getReadChannel();
-        this.writeChannel = tcpClient.getWriteChannel();
+        this.tcpReadChannel = tcpClient.getReadChannel();
+        this.tcpWriteChannel = tcpClient.getWriteChannel();
         this.httpServer = httpServer;
     }
 
@@ -37,7 +37,7 @@ class HttpConnection implements Closeable {
 //        public void run() {
 //            try {
 //                while (currentServlet == null) {
-//                    switch (readChannel.read(buffer)) {
+//                    switch (tcpReadChannel.read(buffer)) {
 //                        case -1:
 //                            buffer = null;
 //                    }

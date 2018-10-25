@@ -8,13 +8,10 @@ import org.rouplex.platform.tcp.TcpServer;
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
-import java.nio.ByteBuffer;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
 class EchoServer implements Closeable {
-    protected final Counts counts = new Counts("server");
+    protected final EchoCounts echoCounts = new EchoCounts("server");
     protected final TcpServer tcpServer;
 
     protected EchoServer(
@@ -26,8 +23,8 @@ class EchoServer implements Closeable {
             final boolean onlyAsyncRW,
             final int callbackOffenderCount,
             int backlog,
-            int echoResponderBufferSize,
-            boolean useServerExecutor
+            final int echoResponderBufferSize,
+            final boolean useServerExecutor
             ) throws Exception {
 
         final AtomicInteger sessionId = new AtomicInteger();
@@ -41,7 +38,7 @@ class EchoServer implements Closeable {
                 .withTcpClientListener(new TcpClientListener() {
                     @Override
                     public void onConnected(TcpClient tcpClient) {
-                        counts.connectedOk.incrementAndGet();
+                        echoCounts.connectedOk.incrementAndGet();
 
                         int sid = sessionId.getAndIncrement();
                         tcpClient.setDebugId(sid + "-session");
@@ -56,21 +53,21 @@ class EchoServer implements Closeable {
                             report(String.format("%s connected", tcpClient.getDebugId()));
                         }
 
-                        new EchoResponder(tcpClient, counts, echoResponderBufferSize, useServerExecutor).start();
+                        new EchoResponder(tcpClient, echoCounts, echoResponderBufferSize, useServerExecutor).start();
                     }
 
                     @Override
                     public void onConnectionFailed(TcpClient tcpClient, Exception reason) {
-                        counts.failedConnect.incrementAndGet();
+                        echoCounts.failedConnect.incrementAndGet();
                         report(String.format("%s failed connect", tcpClient.getDebugId()));
                     }
 
                     @Override
                     public void onDisconnected(TcpClient tcpClient, Exception optionalReason) {
                         if (optionalReason == null) {
-                            counts.disconnectedOk.incrementAndGet();
+                            echoCounts.disconnectedOk.incrementAndGet();
                         } else {
-                            counts.disconnectedKo.incrementAndGet();
+                            echoCounts.disconnectedKo.incrementAndGet();
                         }
 
                         report(String.format("%s disconnected (%s)", tcpClient.getDebugId(), optionalReason == null

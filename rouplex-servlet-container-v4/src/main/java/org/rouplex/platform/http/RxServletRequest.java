@@ -1,7 +1,7 @@
 package org.rouplex.platform.http;
 
+import org.rouplex.platform.io.ReactiveReadChannel;
 import org.rouplex.platform.tcp.TcpClient;
-import org.rouplex.platform.tcp.TcpReadChannel;
 
 import javax.servlet.*;
 import java.io.BufferedReader;
@@ -17,18 +17,16 @@ import java.util.Map;
  */
 class RxServletRequest implements ServletRequest, Runnable {
     private final ServletInputStream servletInputStream;
-    private final TcpReadChannel tcpReadChannel;
+    private final ReactiveReadChannel readChannel;
 
     RxServletRequest(TcpClient tcpClient, ByteBuffer readBuffer) {
-        tcpReadChannel = tcpClient.getReadChannel();
+        readChannel = tcpClient.getReadChannel();
         servletInputStream = new RxInputStream(readBuffer, tcpClient.getReadChannel());
     }
 
     @Override
-    public void run() { // handle read ready
-        if (servletInputStream != null) {
+    public void run() {
 
-        }
     }
 
     @Override

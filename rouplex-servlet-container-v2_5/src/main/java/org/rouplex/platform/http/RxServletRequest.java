@@ -3,7 +3,9 @@ package org.rouplex.platform.http;
 import org.rouplex.platform.tcp.TcpClient;
 import org.rouplex.platform.tcp.TcpReadChannel;
 
-import javax.servlet.*;
+import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletInputStream;
+import javax.servlet.ServletRequest;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -36,7 +38,7 @@ class RxServletRequest implements ServletRequest, Runnable {
     }
 
     @Override
-    public Enumeration<String> getAttributeNames() {
+    public Enumeration getAttributeNames() {
         return null;
     }
 
@@ -71,7 +73,7 @@ class RxServletRequest implements ServletRequest, Runnable {
     }
 
     @Override
-    public Enumeration<String> getParameterNames() {
+    public Enumeration getParameterNames() {
         return null;
     }
 
@@ -81,7 +83,7 @@ class RxServletRequest implements ServletRequest, Runnable {
     }
 
     @Override
-    public Map<String, String[]> getParameterMap() {
+    public Map getParameterMap() {
         return null;
     }
 
@@ -136,7 +138,7 @@ class RxServletRequest implements ServletRequest, Runnable {
     }
 
     @Override
-    public Enumeration<Locale> getLocales() {
+    public Enumeration getLocales() {
         return null;
     }
 
@@ -173,40 +175,5 @@ class RxServletRequest implements ServletRequest, Runnable {
     @Override
     public int getLocalPort() {
         return 0;
-    }
-
-    @Override
-    public ServletContext getServletContext() {
-        return null;
-    }
-
-    @Override
-    public AsyncContext startAsync() throws IllegalStateException {
-        return null;
-    }
-
-    @Override
-    public AsyncContext startAsync(ServletRequest servletRequest, ServletResponse servletResponse) throws IllegalStateException {
-        return null;
-    }
-
-    @Override
-    public boolean isAsyncStarted() {
-        return false;
-    }
-
-    @Override
-    public boolean isAsyncSupported() {
-        return false;
-    }
-
-    @Override
-    public AsyncContext getAsyncContext() {
-        return null;
-    }
-
-    @Override
-    public DispatcherType getDispatcherType() {
-        return null;
     }
 }

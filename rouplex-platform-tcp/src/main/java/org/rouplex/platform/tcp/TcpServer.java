@@ -49,6 +49,10 @@ public class TcpServer extends TcpEndPoint {
         protected TcpClientListener tcpClientListener;
         protected TcpServerListener tcpServerListener;
 
+        protected TcpServerBuilder(TcpReactor.TcpSelector tcpSelector) {
+            super(tcpSelector);
+        }
+
         protected TcpServerBuilder(TcpReactor tcpReactor) {
             super(tcpReactor);
         }
@@ -153,16 +157,41 @@ public class TcpServer extends TcpEndPoint {
 
         protected TcpServer buildTcpServer() throws Exception {
             prepareBuild();
+
             return new TcpServer(this);
         }
+
+        @Override
+        protected B cloneInto(B builder) {
+            super.cloneInto(builder);
+
+            builder.backlog = backlog;
+            builder.tcpClientListener = tcpClientListener;
+            builder.tcpServerListener = tcpServerListener;
+
+            return builder;
+        }
+
+
     }
 
     protected final TcpServerBuilder builder;
     protected final TcpServerListener tcpServerListener;
     protected final TcpClientListener tcpClientListener;
 
+    // This static method exists only to be called from constructor, and only due to a JDK bug (prior to Jdk10)
+    // which prevents proper cloning when called from inside the builder itself
+    private static TcpServerBuilder clone(TcpServerBuilder builder) {
+        return builder.cloneInto(new TcpServer.TcpServerBuilder(builder.tcpSelector) {
+            @Override
+            public TcpServer build() {
+                return null;
+            }
+        });
+    }
+
     protected TcpServer(TcpServerBuilder builder) {
-        super(builder.selectableChannel, builder.tcpSelector, builder);
+        super(builder.selectableChannel, builder.tcpSelector, builder = clone(builder));
 
         this.builder = builder;
         this.attachment = builder.getAttachment();

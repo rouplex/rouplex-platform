@@ -4,7 +4,7 @@ import org.rouplex.platform.tcp.TcpClient;
 
 abstract class EchoAbstract {
     protected final TcpClient tcpClient;
-    protected final Counts counts;
+    protected final EchoCounts echoCounts;
 
     protected final Runnable pumpRequest = new Runnable() {
         @Override
@@ -20,9 +20,9 @@ abstract class EchoAbstract {
         }
     };
 
-    EchoAbstract(TcpClient tcpClient, Counts counts) {
+    EchoAbstract(TcpClient tcpClient, EchoCounts echoCounts) {
         this.tcpClient = tcpClient;
-        this.counts = counts;
+        this.echoCounts = echoCounts;
     }
 
     abstract void start();
@@ -31,7 +31,7 @@ abstract class EchoAbstract {
 
     protected void shutdownOutput() {
         report(String.format("%s shutting down", tcpClient.getDebugId()));
-        counts.sendingEos.incrementAndGet();
+        echoCounts.sendingEos.incrementAndGet();
 
         try {
             tcpClient.getWriteChannel().shutdown();
@@ -41,7 +41,7 @@ abstract class EchoAbstract {
             return;
         }
 
-        counts.sentEos.incrementAndGet();
+        echoCounts.sentEos.incrementAndGet();
         report(String.format("%s shutdown", tcpClient.getDebugId()));
     }
 

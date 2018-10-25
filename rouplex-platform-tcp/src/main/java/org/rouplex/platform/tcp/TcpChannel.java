@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-abstract class TcpChannel implements ReactiveChannel {
+public abstract class TcpChannel implements ReactiveChannel {
     protected enum ChannelType {
         Read, Write
     }
@@ -182,36 +182,41 @@ abstract class TcpChannel implements ReactiveChannel {
     public void addChannelReadyCallback(final Runnable channelReadyCallback) throws IOException {
         if (Thread.currentThread() == tcpSelector.tcpSelectorThread) {
             syncAddChannelReadyCallback(channelReadyCallback); // most common
-        } else {
-            if (bufferingType == BufferingType.None) {
+            return;
+        }
+
+        if (bufferingType == BufferingType.None) {
+            tcpSelector.asyncAddTcpChannelCallback(tcpClient, channelType, channelReadyCallback);
+            return;
+        }
+
+        synchronized (lock) {
+            if (byteBuffer.position() == 0) {
                 tcpSelector.asyncAddTcpChannelCallback(tcpClient, channelType, channelReadyCallback);
-            } else {
-                synchronized (lock) {
-                    if (byteBuffer.position() > 0) {
-                        if (tcpClient.eventsExecutor == null) {
-                            try {
-                                channelReadyCallback.run();
-                            } catch (RuntimeException re) {
-                                tcpClient.handleException(TcpEndPoint.AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, false);
-                            }
-                        } else {
-                            tcpClient.eventsExecutor.execute(new Runnable() {
-                                @Override
-                                public void run() {
-                                    try {
-                                        channelReadyCallback.run();
-                                    } catch (RuntimeException re) {
-                                        tcpClient.handleException(TcpEndPoint.AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, false);
-                                    }
-                                }
-                            });
-                        }
-                    } else {
-                        tcpSelector.asyncAddTcpChannelCallback(tcpClient, channelType, channelReadyCallback);
-                    }
-                }
+                return;
             }
         }
+
+        if (tcpClient.eventsExecutor == null) {
+            try {
+                channelReadyCallback.run();
+            } catch (RuntimeException re) {
+                tcpClient.handleException(TcpEndPoint.AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, false);
+            }
+
+            return;
+        }
+
+        tcpClient.eventsExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    channelReadyCallback.run();
+                } catch (RuntimeException re) {
+                    tcpClient.handleException(TcpEndPoint.AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, false);
+                }
+            }
+        });
     }
 
     protected void syncAddChannelReadyCallback(Runnable channelReadyCallback) {
