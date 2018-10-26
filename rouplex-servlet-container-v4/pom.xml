@@ -23,21 +23,13 @@
 
                 <executions>
                     <execution>
-                        <id>default-jar</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
-                    </execution>
-
-                    <execution>
                         <id>jar-with-classifier</id>
                         <phase>package</phase>
                         <goals>
                             <goal>jar</goal>
                         </goals>
                         <configuration>
-                            <classifier>jdk-${jdk}-servlet-v4</classifier>
+                            <classifier>servlet-v4</classifier>
                         </configuration>
                     </execution>
                 </executions>

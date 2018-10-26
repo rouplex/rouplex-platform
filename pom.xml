@@ -13,12 +13,12 @@
     <description>
         A platform for discovery and communication between components in a distributed environment.
 
-        At its minimum, the platform inputStream a library which can be used to serialize and deserialize application constructs
+        At its minimum, the platform is a library which can be used to serialize and deserialize application constructs
         into payloads which it can then send to and receive from remote endpoints. For now it supports TCP and HTTP
         communication protocols with WebSockets coming soon. It supports raw byte streams via TCP, as well as
         application/json via JAX-RS as serialization protocols. It offers plain or SSL/TLS communication for security
-        of your data in transit. For now it inputStream only available in Java, with bindings for other languages coming soon.
-        The communication pattern inputStream request-reply, with fail fast semantics, and with service consumers (clients)
+        of your data in transit. For now it is only available in Java, with bindings for other languages coming soon.
+        The communication pattern is request-reply, with fail fast semantics, and with service consumers (clients)
         knowing beforehand the coordinates of the service providers (servers). The TCP communication protocol offers
         blocking/unblocking/asynchronous flavors whereas the rest are only blocking for now.
 
@@ -41,6 +41,12 @@
     </licenses>
 
     <properties>
+        <!--Compile using this Default/Minimal Jdk unless specified-->
+        <jdk>1.6</jdk>
+
+        <!--Compile using this servlet container version unless specified-->
+        <servlet.container.version>v4</servlet.container.version>
+
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <maven.compiler.source>${jdk}</maven.compiler.source>
@@ -240,44 +246,18 @@
 
     <profiles>
         <profile>
-            <id>jdk1.6</id>
+            <id>servlet-version_not-v2_5</id>
 
             <activation>
                 <property>
-                    <name>jdk</name>
-                    <value>1.6</value>
+                    <name>servlet.container.version</name>
+                    <value>!v2_5</value>
                 </property>
             </activation>
 
             <properties>
-                <!--Set this for cases where a build profile inputStream used for activation (but not system property)-->
-                <jdk>1.6</jdk>
-            </properties>
-
-            <modules>
-                <!--jdk1.6 only supported by servlet 2.5-->
-                <module>rouplex-servlet-container-v2_5</module>
-            </modules>
-        </profile>
-
-        <profile>
-            <id>jdk1.7</id>
-
-            <activation>
-                <property>
-                    <name>jdk</name>
-                    <value>1.7</value>
-                </property>
-            </activation>
-
-            <properties>
-                <!--Set this for cases where a build profile inputStream used for activation (but not system property)-->
                 <jdk>1.7</jdk>
             </properties>
-
-            <modules>
-                <module>rouplex-servlet-container-v3</module>
-            </modules>
         </profile>
 
         <profile>
@@ -291,7 +271,7 @@
             </activation>
 
             <properties>
-                <!--Set this for cases where a build profile inputStream used for activation (but not system property)-->
+                <!--Set this for cases where a build profile is used for activation (but not system property)-->
                 <jdk>1.8</jdk>
             </properties>
 
@@ -321,71 +301,6 @@
                     </plugin>
                 </plugins>
             </build>
-
-            <modules>
-                <module>rouplex-servlet-container-v4</module>
-            </modules>
-        </profile>
-
-        <profile>
-            <id>jdk1.9</id>
-
-            <activation>
-                <property>
-                    <name>jdk</name>
-                    <value>1.9</value>
-                </property>
-            </activation>
-
-            <properties>
-                <jdk>1.9</jdk>
-            </properties>
-
-            <modules>
-                <module>rouplex-servlet-container-v4</module>
-            </modules>
-        </profile>
-
-        <profile>
-            <id>jdk1.10</id>
-
-            <activation>
-                <property>
-                    <name>jdk</name>
-                    <value>1.10</value>
-                </property>
-            </activation>
-
-            <properties>
-                <!--Set this for cases where a build profile inputStream used for activation (but not system property)-->
-                <!--Temporary keep this at 1.9 until rouplex-niossl:jdk1.10 becomes accessible in maven central-->
-                <jdk>1.9</jdk>
-            </properties>
-
-            <modules>
-                <module>rouplex-servlet-container-v4</module>
-            </modules>
-        </profile>
-
-        <profile>
-            <id>jdk1.11</id>
-
-            <activation>
-                <property>
-                    <!--Default / Latest-->
-                    <name>!jdk</name>
-                </property>
-            </activation>
-
-            <properties>
-                <!--Set this for cases where a build profile inputStream used for activation (but not system property)-->
-                <!--Temporary keep this at 1.9 until rouplex-niossl:jdk1.11 becomes accessible in maven central-->
-                <jdk>1.8</jdk>
-            </properties>
-
-            <modules>
-                <module>rouplex-servlet-container-v4</module>
-            </modules>
         </profile>
 
         <profile>
@@ -458,6 +373,7 @@
         <module>rouplex-platform-jaxrs-client</module>
         <module>rouplex-platform-jersey</module>
         <module>rouplex-platform-tcp</module>
+        <module>rouplex-servlet-container-${servlet.container.version}</module>
         <!--<module>rouplex-platform-tcp-instrumentor</module>-->
     </modules>
 </project>

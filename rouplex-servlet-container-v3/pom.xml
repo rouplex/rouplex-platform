@@ -28,7 +28,7 @@
                             <goal>jar</goal>
                         </goals>
                         <configuration>
-                            <classifier>jdk-${jdk}-servlet-v3</classifier>
+                            <classifier>servlet-v3</classifier>
                         </configuration>
                     </execution>
                 </executions>
