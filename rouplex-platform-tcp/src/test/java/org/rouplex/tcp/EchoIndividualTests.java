@@ -2,11 +2,15 @@ package org.rouplex.tcp;
 
 import org.junit.Assert;
 import org.junit.Test;
+//import org.rouplex.nio.channels.spi.SSLSelectorProvider;
 import org.rouplex.platform.tcp.TcpReactor;
 
+import java.nio.channels.spi.SelectorProvider;
 import java.util.concurrent.TimeUnit;
 
 public class EchoIndividualTests {
+    boolean secure = false; //secure: true;
+    SelectorProvider selectorProvider = null; //secure: SSLSelectorProvider.provider();
 
     /**
      * Success with:
@@ -15,10 +19,13 @@ public class EchoIndividualTests {
      */
     @Test
     public void test1_SimplestUseCase() throws Exception {
-        TcpReactor tcpReactor = new TcpReactor.Builder().withThreadCount(1).build();
+        TcpReactor tcpReactor = new TcpReactor.Builder()
+                .withSelectorProvider(selectorProvider)
+                .withThreadCount(1)
+                .build();
 
-        EchoServer echoServer = new EchoServer(tcpReactor, 0, false, 0, 0, false, 0, 0, 1000, false);
-        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpReactor, echoServer.getInetSocketAddress().getPort(), 1, false, 0, 0, false, 0, 20, 1000, 0);
+        EchoServer echoServer = new EchoServer(tcpReactor, 0, secure, false, 0, 0, false, 0, 0, 1000, false);
+        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpReactor, echoServer.getInetSocketAddress().getPort(), secure, 1, false, 0, 0, false, 0, 20, 1000, 0);
 
         echoClientGroup.connectionEvents.await(1, TimeUnit.SECONDS);
         echoClientGroup.echoCounts.report();
@@ -44,12 +51,14 @@ public class EchoIndividualTests {
      */
     @Test(expected = AssertionError.class)
     public void test2_LongCallbackFailure() throws Exception {
-        TcpReactor tcpServerReactor = new TcpReactor.Builder().withThreadCount(1).build();
-        TcpReactor tcpClientReactor = new TcpReactor.Builder().withThreadCount(1).build();
+        TcpReactor tcpServerReactor = new TcpReactor.Builder()
+                .withSelectorProvider(selectorProvider).withThreadCount(1).build();
+        TcpReactor tcpClientReactor = new TcpReactor.Builder()
+                .withSelectorProvider(selectorProvider).withThreadCount(1).build();
 
         int callbackOffenderCount = 1;
-        EchoServer echoServer = new EchoServer(tcpServerReactor, 0, false, 0, 0, false, callbackOffenderCount, 0, 1000, false);
-        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpClientReactor, echoServer.getInetSocketAddress().getPort(), 2, false, callbackOffenderCount, 0, false, 0, 20, 1000, 0);
+        EchoServer echoServer = new EchoServer(tcpServerReactor, 0, secure, false, 0, 0, false, callbackOffenderCount, 0, 1000, false);
+        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpClientReactor, echoServer.getInetSocketAddress().getPort(), secure, 2, false, callbackOffenderCount, 0, false, 0, 20, 1000, 0);
 
         echoClientGroup.connectionEvents.await(1, TimeUnit.SECONDS);
         echoClientGroup.echoCounts.report();
@@ -79,12 +88,14 @@ public class EchoIndividualTests {
      */
     @Test
     public void test2_1LongCallbackMitigatedByMoreReactorThreads() throws Exception {
-        TcpReactor tcpServerReactor = new TcpReactor.Builder().withThreadCount(2).build();
-        TcpReactor tcpClientReactor = new TcpReactor.Builder().withThreadCount(1).build();
+        TcpReactor tcpServerReactor = new TcpReactor.Builder()
+                .withSelectorProvider(selectorProvider).withThreadCount(2).build();
+        TcpReactor tcpClientReactor = new TcpReactor.Builder()
+                .withSelectorProvider(selectorProvider).withThreadCount(1).build();
 
         int callbackOffenderCount = 1;
-        EchoServer echoServer = new EchoServer(tcpServerReactor, 0, false, 0, 0, false, callbackOffenderCount, 0, 1000, false);
-        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpClientReactor, echoServer.getInetSocketAddress().getPort(), 2, false, callbackOffenderCount, 0, false, 0, 20, 1000, 0);
+        EchoServer echoServer = new EchoServer(tcpServerReactor, 0, secure, false, 0, 0, false, callbackOffenderCount, 0, 1000, false);
+        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpClientReactor, echoServer.getInetSocketAddress().getPort(), secure, 2, false, callbackOffenderCount, 0, false, 0, 20, 1000, 0);
 
         echoClientGroup.connectionEvents.await(1, TimeUnit.SECONDS);
         echoClientGroup.echoCounts.report();
@@ -114,12 +125,14 @@ public class EchoIndividualTests {
      */
     @Test
     public void test2_2LongCallbackMitigatedByExecutorUse() throws Exception {
-        TcpReactor tcpServerReactor = new TcpReactor.Builder().withThreadCount(1).build();
-        TcpReactor tcpClientReactor = new TcpReactor.Builder().withThreadCount(1).build();
+        TcpReactor tcpServerReactor = new TcpReactor.Builder()
+                .withSelectorProvider(selectorProvider).withThreadCount(1).build();
+        TcpReactor tcpClientReactor = new TcpReactor.Builder()
+                .withSelectorProvider(selectorProvider).withThreadCount(1).build();
 
         int callbackOffenderCount = 1;
-        EchoServer echoServer = new EchoServer(tcpServerReactor, 0, true, 0, 0, false, callbackOffenderCount, 0, 1000, false);
-        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpClientReactor, echoServer.getInetSocketAddress().getPort(), 2, false, callbackOffenderCount, 0, false, 0, 20, 1000, 0);
+        EchoServer echoServer = new EchoServer(tcpServerReactor, 0, secure, true, 0, 0, false, callbackOffenderCount, 0, 1000, false);
+        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpClientReactor, echoServer.getInetSocketAddress().getPort(), secure, 2, false, callbackOffenderCount, 0, false, 0, 20, 1000, 0);
 
         echoClientGroup.connectionEvents.await(1, TimeUnit.SECONDS);
         echoClientGroup.echoCounts.report();
@@ -145,10 +158,11 @@ public class EchoIndividualTests {
      */
     @Test(expected = AssertionError.class)
     public void test3_StackOverflowFailure() throws Exception {
-        TcpReactor tcpReactor = new TcpReactor.Builder().withThreadCount(1).build();
+        TcpReactor tcpReactor = new TcpReactor.Builder()
+                .withSelectorProvider(selectorProvider).withThreadCount(1).build();
 
-        EchoServer echoServer = new EchoServer(tcpReactor, 0, true, 0, 0, false, 0, 0, 1, false);
-        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpReactor, echoServer.getInetSocketAddress().getPort(), 1, false, 0, 0, false, 0, 10000, 1000, 0);
+        EchoServer echoServer = new EchoServer(tcpReactor, 0, secure, true, 0, 0, false, 0, 0, 1, false);
+        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpReactor, echoServer.getInetSocketAddress().getPort(), secure, 1, false, 0, 0, false, 0, 10000, 1000, 0);
         echoClientGroup.connectionEvents.await(1, TimeUnit.SECONDS);
 
         echoClientGroup.echoCounts.report();
@@ -172,10 +186,13 @@ public class EchoIndividualTests {
      */
     @Test
     public void test3_1StackOverflowFailureMitigatedByExecutorUse() throws Exception {
-        TcpReactor tcpReactor = new TcpReactor.Builder().withThreadCount(1).build();
+        TcpReactor tcpReactor = new TcpReactor.Builder()
+                .withSelectorProvider(selectorProvider)
+                .withThreadCount(1)
+                .build();
 
-        EchoServer echoServer = new EchoServer(tcpReactor, 0, true, 0, 0, false, 0, 0, 1, true);
-        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpReactor, echoServer.getInetSocketAddress().getPort(), 1, false, 0, 0, false, 0, 10000, 1000, 0);
+        EchoServer echoServer = new EchoServer(tcpReactor, 0, secure, true, 0, 0, false, 0, 0, 1, true);
+        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpReactor, echoServer.getInetSocketAddress().getPort(), secure, 1, false, 0, 0, false, 0, 10000, 1000, 0);
         echoClientGroup.connectionEvents.await(1, TimeUnit.SECONDS);
 
         echoClientGroup.echoCounts.report();

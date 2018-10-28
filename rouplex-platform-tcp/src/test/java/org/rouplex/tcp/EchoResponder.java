@@ -26,60 +26,59 @@ class EchoResponder extends EchoAbstract {
 
     @Override
     protected void pumpRequest() {
-        boolean bufferInitiallyEmpty;
         boolean bufferFull;
-        synchronized (byteBuffer) {
-            bufferInitiallyEmpty = byteBuffer.position() == 0;
-            int read;
-            try {
-                read = tcpClient.getReadChannel().read(byteBuffer);
-            } catch (IOException ioe) {
-                echoCounts.failedRead.incrementAndGet();
-                // by default the tcpClient gets closed on exceptions, nothing to do here
-                report(String.format("%s threw exception [%s]", tcpClient.getDebugId(), ioe.getMessage()));
-                return;
-            }
-
-            try {
-                switch (read) {
-                    case -1:
-                        readEos = true;
-                        echoCounts.receivedEos.incrementAndGet();
-                        report(String.format("%s received eos", tcpClient.getDebugId()));
-                        if (byteBuffer.position() == 0) {
-                            // by default the tcpClient gets closed on both eos, nothing to do here
-                            shutdownOutput();
-                        }
-                        return;
-                    case 0:
-                        // nothing changed, just read some more when there is bytes available for reading
-                        tcpClient.getReadChannel().addChannelReadyCallback(pumpRequest);
-                        return;
-                    default:
-                        String payload = new String(byteBuffer.array(), byteBuffer.position() - read, read);
-                        report(String.format("%s received [%s]", tcpClient.getDebugId(), payload));
-                        bufferFull = !byteBuffer.hasRemaining();
+        do {
+            boolean bufferInitiallyEmpty;
+            synchronized (byteBuffer) {
+                bufferInitiallyEmpty = byteBuffer.position() == 0;
+                int read;
+                try {
+                    read = tcpClient.getReadChannel().read(byteBuffer);
+                } catch (IOException ioe) {
+                    echoCounts.failedRead.incrementAndGet();
+                    // by default the tcpClient gets closed on exceptions, nothing to do here
+                    report(String.format("%s threw exception [%s]", tcpClient.getDebugId(), ioe.getMessage()));
+                    return;
                 }
-            } catch (IOException ioe) {
-                // by default the tcpClient gets closed on exceptions, nothing to do here
-                report(String.format("%s threw exception [%s]", tcpClient.getDebugId(), ioe.getMessage()));
-                return;
-            }
-        }
 
-        // buffer was empty and we read something, trigger write
-        if (bufferInitiallyEmpty) {
-            if (useExecutor) {
-                executor.execute(pumpResponse);
-            } else {
-                pumpResponse();
+                try {
+                    switch (read) {
+                        case -1:
+                            readEos = true;
+                            echoCounts.receivedEos.incrementAndGet();
+                            report(String.format("%s received eos", tcpClient.getDebugId()));
+                            if (byteBuffer.position() == 0) {
+                                // by default the tcpClient gets closed on both eos, nothing to do here
+                                shutdownOutput();
+                            }
+                            return;
+                        case 0:
+                            // nothing changed, just read some more when there is bytes available for reading
+                            tcpClient.getReadChannel().addChannelReadyCallback(pumpRequest);
+                            return;
+                        default:
+                            String payload = new String(byteBuffer.array(), byteBuffer.position() - read, read);
+                            report(String.format("%s received [%s]", tcpClient.getDebugId(), payload));
+                            bufferFull = !byteBuffer.hasRemaining();
+                    }
+                } catch (IOException ioe) {
+                    // by default the tcpClient gets closed on exceptions, nothing to do here
+                    report(String.format("%s threw exception [%s]", tcpClient.getDebugId(), ioe.getMessage()));
+                    return;
+                }
             }
-        }
 
-        // read some more since buffer has space available for reading
-        if (!bufferFull) {
-            pumpRequest();
-        }
+            // buffer was empty and we read something, trigger write (otherwise a write-ready callback must have been set)
+            if (bufferInitiallyEmpty) {
+                if (useExecutor) {
+                    executor.execute(pumpResponse);
+                } else {
+                    pumpResponse();
+                }
+            }
+
+            // read some more since buffer has space available for reading
+        } while (!bufferFull);
     }
 
     @Override

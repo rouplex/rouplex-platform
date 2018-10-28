@@ -1,5 +1,6 @@
 package org.rouplex.tcp;
 
+import org.rouplex.commons.security.SecurityUtils;
 import org.rouplex.platform.tcp.TcpClient;
 import org.rouplex.platform.tcp.TcpClientListener;
 import org.rouplex.platform.tcp.TcpReactor;
@@ -16,6 +17,7 @@ class EchoClientGroup {
     EchoClientGroup(
             TcpReactor tcpReactor,
             int remotePort,
+            boolean secure,
             int clientGroupSize,
             boolean useExecutor,
             int readBufferSize,
@@ -32,6 +34,7 @@ class EchoClientGroup {
             TcpClient.Builder tcpClientBuilder = new TcpClient.Builder(tcpReactor) {{
                 withOnlyAsyncReadWrite(onlyAsyncRW);
             }}
+                    .withSecure(secure ? SecurityUtils.buildRelaxedSSLContext(true, true) : null)
                     .withRemoteAddress("localhost", remotePort)
                     .withReadBufferSize(readBufferSize)
                     .withWriteBufferSize(writeBufferSize)
@@ -80,7 +83,7 @@ class EchoClientGroup {
             }
 
             TcpClient tcpClient = tcpClientBuilder.build();
-            tcpClient.setDebugId(i + "-client");
+            tcpClient.setDebugId(i + (secure ? "-secure-client" : "-client"));
             tcpClient.connect();
             if (delayBetweenSuccessiveConnectsMillis > 0) {
                 Thread.sleep(delayBetweenSuccessiveConnectsMillis);

@@ -1,10 +1,13 @@
 package org.rouplex.tcp;
 
+import org.rouplex.commons.security.SecurityUtils;
 import org.rouplex.platform.tcp.TcpClient;
 import org.rouplex.platform.tcp.TcpClientListener;
 import org.rouplex.platform.tcp.TcpReactor;
 import org.rouplex.platform.tcp.TcpServer;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -17,6 +20,7 @@ class EchoServer implements Closeable {
     protected EchoServer(
             TcpReactor tcpReactor,
             int localPort,
+            final boolean secure,
             boolean useExecutor,
             int readBufferSize,
             int writeBufferSize,
@@ -25,12 +29,13 @@ class EchoServer implements Closeable {
             int backlog,
             final int echoResponderBufferSize,
             final boolean useServerExecutor
-            ) throws Exception {
+    ) throws Exception {
 
         final AtomicInteger sessionId = new AtomicInteger();
         TcpServer.Builder tcpServerBuilder = new TcpServer.Builder(tcpReactor) {{
             withOnlyAsyncReadWrite(onlyAsyncRW);
         }}
+                .withSecure(secure ? SSLContext.getDefault() : null)
                 .withReadBufferSize(readBufferSize)
                 .withWriteBufferSize(writeBufferSize)
                 .withLocalAddress("localhost", localPort)
@@ -41,7 +46,7 @@ class EchoServer implements Closeable {
                         echoCounts.connectedOk.incrementAndGet();
 
                         int sid = sessionId.getAndIncrement();
-                        tcpClient.setDebugId(sid + "-session");
+                        tcpClient.setDebugId(sid + (secure ? "-secure-session" : "-session"));
 
                         if (sid < callbackOffenderCount) try {
                             report(String.format("%s connected, now delaying", tcpClient.getDebugId()));
@@ -84,7 +89,7 @@ class EchoServer implements Closeable {
     }
 
     InetSocketAddress getInetSocketAddress() throws IOException {
-         return (InetSocketAddress) tcpServer.getLocalAddress();
+        return (InetSocketAddress) tcpServer.getLocalAddress();
     }
 
     private static void report(String log) {

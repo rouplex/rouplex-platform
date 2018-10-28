@@ -41,11 +41,14 @@
     </licenses>
 
     <properties>
-        <!--Compile using this Default/Minimal Jdk unless specified-->
+        <!--Use this Default/Minimal Jdk unless specified or overridden-->
         <jdk>1.6</jdk>
 
-        <!--Compile using this servlet container version unless specified-->
+        <!--Use this servlet container version unless specified-->
         <servlet.container.version>v4</servlet.container.version>
+
+        <!--Use this rouplex-niossl version for Jdk 1.6 and override to use Jdk 1.7 for all the rest via profiles-->
+        <rouplex-niossl.version>1.6.3</rouplex-niossl.version>
 
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
@@ -124,7 +127,7 @@
             <dependency>
                 <groupId>org.rouplex</groupId>
                 <artifactId>rouplex-niossl</artifactId>
-                <version>${jdk}.3</version>
+                <version>${rouplex-niossl.version}</version>
             </dependency>
 
             <dependency>
@@ -256,6 +259,7 @@
             </activation>
 
             <properties>
+                <!--Only set if not set in system properties yet-->
                 <jdk>1.7</jdk>
             </properties>
         </profile>

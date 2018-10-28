@@ -433,14 +433,13 @@ public class TcpReactor implements Closeable {
                     updatedTcpClients.clear();
 
                     // rest of the clients (shrinking their interestOps)
-                    for (Iterator<SelectionKey> selectionKeyIter = selectedKeys.iterator(); selectionKeyIter.hasNext();) {
-                        SelectionKey selectionKey = selectionKeyIter.next();
-
-                        if (selectionKey.isValid()) {
+                    for (SelectionKey selectionKey : selectedKeys) {
+                        if (selectionKey.isValid()) { // just performance gain, call is safe even with invalid key
                             ((TcpClient) selectionKey.attachment()).syncUpdateInterestOps();
-                            selectionKeyIter.remove();
                         }
                     }
+
+                    selectedKeys.clear();
 
                     startSelectionNano = System.nanoTime();
                     timeOutsideSelectNano += startSelectionNano - endSelectionNano;
@@ -458,8 +457,8 @@ public class TcpReactor implements Closeable {
                     for (Iterator<SelectionKey> selectedKeysIter = selectedKeys.iterator(); selectedKeysIter.hasNext();) {
                         SelectionKey selectionKey = selectedKeysIter.next();
 
-                        if (selectionKey.isAcceptable()) {
-                            try {
+                        try {
+                            if (selectionKey.isAcceptable()) {
                                 selectedKeysIter.remove();
 
                                 SocketChannel socketChannel = ((ServerSocketChannel) selectionKey.channel()).accept();
@@ -468,12 +467,15 @@ public class TcpReactor implements Closeable {
 
                                 // asyncRegisterTcpEndPoint (and not registerTcpEndPoint) b/c tcpSelector is different
                                 tcpSelector.asyncRegisterTcpEndPoint(
-                                    new TcpClient(socketChannel, tcpSelector, (TcpServer) selectionKey.attachment()));
-                            } catch (Exception e) {
-                                // 1. server failed to accept connection -- if its channel is closed it will be
-                                // unregistered the next cycle
-                                // 2. or the next selector is closed -- reactor is then closed so no point in surfacing
+                                        new TcpClient(socketChannel, tcpSelector, (TcpServer) selectionKey.attachment()));
+                                continue;
                             }
+                        } catch (Exception e) {
+                            // 1. server failed to accept connection -- if its channel is closed it will be
+                            // unregistered the next cycle
+                            // 2. or the next selector is closed -- reactor is then closed so no point in surfacing
+
+                            ((TcpEndPoint) selectionKey.attachment()).syncHandleUnregistration(e);
                             continue;
                         }
 
@@ -481,7 +483,7 @@ public class TcpReactor implements Closeable {
                     }
                 }
             } catch (Exception e) {
-                handleSelectException(e);
+                handleSelectException(e); // internal implementation error or reactor closed
             }
 
             syncClose(); // close synchronously.

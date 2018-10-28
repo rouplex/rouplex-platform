@@ -14,8 +14,12 @@ class EchoRequester extends EchoAbstract {
     protected final InputStream inputStream;
     protected final OutputStream outputStream;
 
+    protected int unResponded;
+    protected boolean inputStreamEnded;
+    protected boolean sentEos;
+
     protected EchoRequester(TcpClient tcpClient, EchoCounts echoCounts,
-                  int echoRequesterBufferSize, InputStream inputStream, @Nullable OutputStream outputStream) {
+                            int echoRequesterBufferSize, InputStream inputStream, @Nullable OutputStream outputStream) {
         super(tcpClient, echoCounts);
 
         writeByteBuffer = ByteBuffer.allocate(echoRequesterBufferSize);
@@ -38,34 +42,43 @@ class EchoRequester extends EchoAbstract {
             readFromInputStream = inputStream.read(writeByteBuffer.array(), writeByteBuffer.position(),
                     writeByteBuffer.limit() - writeByteBuffer.position());
 
-            if (readFromInputStream > 0) {
-                writeByteBuffer.position(writeByteBuffer.position() + readFromInputStream);
+            synchronized (writeByteBuffer) {
+                switch (readFromInputStream) {
+                    case -1:
+                        inputStreamEnded = true;
+                    case 0:
+                        break;
+                    default:
+                        unResponded += readFromInputStream;
+                        writeByteBuffer.position(writeByteBuffer.position() + readFromInputStream);
+                }
             }
         } catch (IOException ioe) {
             throw new Error("InputStream threw unexpected exception", ioe);
         }
 
-        if (writeByteBuffer.position() == 0) {
-            shutdownOutput();
+        if (checkShutdown()) {
             return;
         }
 
-        writeByteBuffer.flip();
-        report(String.format("%s sending [%s]", tcpClient.getDebugId(),
-                new String(writeByteBuffer.array(), 0, writeByteBuffer.limit())));
+        if (writeByteBuffer.position() > 0) {
+            writeByteBuffer.flip();
+            report(String.format("%s sending [%s]", tcpClient.getDebugId(),
+                    new String(writeByteBuffer.array(), 0, writeByteBuffer.limit())));
 
-        try {
-            tcpClient.getWriteChannel().write(writeByteBuffer);
-        } catch (Exception ioe) {
-            echoCounts.failedWrite.incrementAndGet();
-            // by default the tcpClient gets closed on exceptions, nothing to do here
-            report(String.format("%s threw exception [%s]", tcpClient.getDebugId(), ioe.getMessage()));
-            return;
+            try {
+                tcpClient.getWriteChannel().write(writeByteBuffer);
+            } catch (Exception ioe) {
+                echoCounts.failedWrite.incrementAndGet();
+                // by default the tcpClient gets closed on exceptions, nothing to do here
+                report(String.format("%s threw exception [%s]", tcpClient.getDebugId(), ioe.getMessage()));
+                return;
+            }
+
+            report(String.format("%s sent [%s]", tcpClient.getDebugId(),
+                    new String(writeByteBuffer.array(), 0, writeByteBuffer.position())));
+            writeByteBuffer.compact();
         }
-
-        report(String.format("%s sent [%s]", tcpClient.getDebugId(),
-                new String(writeByteBuffer.array(), 0, writeByteBuffer.position())));
-        writeByteBuffer.compact();
 
         if (readFromInputStream > 0) {
             try {
@@ -96,12 +109,19 @@ class EchoRequester extends EchoAbstract {
                 case -1:
                     echoCounts.receivedEos.incrementAndGet();
                     report(String.format("%s received eos", tcpClient.getDebugId()));
+                    if (checkShutdown()) {
+                        return;
+                    }
                     break;
                 case 0:
+                    checkShutdown();
                     // nothing changed, just read some more when there inputStream bytes available for reading
                     tcpClient.getReadChannel().addChannelReadyCallback(pumpResponse);
                     break;
                 default:
+                    synchronized (writeByteBuffer) {
+                        unResponded -= read;
+                    }
                     String payload = new String(readByteBuffer.array(), readByteBuffer.position() - read, read);
                     report(String.format("%s received [%s]", tcpClient.getDebugId(), payload));
                     if (outputStream != null) {
@@ -113,6 +133,22 @@ class EchoRequester extends EchoAbstract {
         } catch (IOException ioe) {
             // by default the tcpClient gets closed on exceptions, nothing to do here
             report(String.format("%s threw exception [%s]", tcpClient.getDebugId(), ioe.getMessage()));
+        }
+    }
+
+    private boolean checkShutdown() {
+        synchronized (writeByteBuffer) {
+            if (sentEos) {
+                return true;
+            }
+
+            if (!inputStreamEnded || unResponded != 0) {
+                return false;
+            }
+
+            sentEos = true;
+            shutdownOutput();
+            return true;
         }
     }
 }

@@ -171,8 +171,6 @@ public class TcpServer extends TcpEndPoint {
 
             return builder;
         }
-
-
     }
 
     protected final TcpServerBuilder builder;

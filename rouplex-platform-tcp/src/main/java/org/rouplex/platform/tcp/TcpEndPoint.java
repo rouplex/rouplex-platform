@@ -308,10 +308,16 @@ abstract class TcpEndPoint implements Closeable {
             super.cloneInto(builder);
 
             builder.eventsExecutor = eventsExecutor;
+            builder.localAddress = localAddress;
+            builder.sslContext = sslContext;
+            builder.selectableChannel = selectableChannel;
+
             builder.useDirectBuffers = useDirectBuffers;
             builder.readBufferSize = readBufferSize;
             builder.writeBufferSize = writeBufferSize;
             builder.onlyAsyncReadWrite = onlyAsyncReadWrite;
+
+            builder.autoCloseMask = autoCloseMask;
 
             return builder;
         }
