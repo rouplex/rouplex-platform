@@ -18,7 +18,7 @@ import java.nio.channels.SocketChannel;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class TcpServer extends TcpEndPoint {
+public class TcpServer extends TcpEndpoint {
     public static class Builder extends TcpServerBuilder<TcpServer, Builder> {
         public Builder(TcpReactor tcpReactor) {
             super(tcpReactor);
@@ -44,7 +44,7 @@ public class TcpServer extends TcpEndPoint {
      *
      * Not thread safe.
      */
-    protected abstract static class TcpServerBuilder<T, B extends TcpServerBuilder> extends TcpEndPointBuilder<T, B> {
+    protected abstract static class TcpServerBuilder<T, B extends TcpServerBuilder> extends TcpEndpointBuilder<T, B> {
         protected int backlog;
         protected TcpClientListener tcpClientListener;
         protected TcpServerListener tcpServerListener;
@@ -223,7 +223,7 @@ public class TcpServer extends TcpEndPoint {
             }
         }
 
-        tcpSelector.asyncRegisterTcpEndPoint(this);
+        tcpSelector.asyncRegisterTcpEndpoint(this);
         waitForOpen(Long.MAX_VALUE); // todo revisit/shorten this
     }
 

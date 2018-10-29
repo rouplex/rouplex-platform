@@ -90,7 +90,7 @@ public abstract class TcpChannel implements ReactiveChannel {
      * owning client.
      */
     protected void handleEos() throws IOException {
-        if ((tcpClient.autoCloseMask & TcpEndPoint.AutoCloseCondition.ON_CHANNEL_EOS.mask) != 0) {
+        if ((tcpClient.autoCloseMask & TcpEndpoint.AutoCloseCondition.ON_CHANNEL_EOS.mask) != 0) {
             synchronized (lock) {
                 if (!eos) {
                     return;
@@ -201,7 +201,7 @@ public abstract class TcpChannel implements ReactiveChannel {
             try {
                 channelReadyCallback.run();
             } catch (RuntimeException re) {
-                tcpClient.handleException(TcpEndPoint.AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, false);
+                tcpClient.handleException(TcpEndpoint.AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, false);
             }
 
             return;
@@ -213,7 +213,7 @@ public abstract class TcpChannel implements ReactiveChannel {
                 try {
                     channelReadyCallback.run();
                 } catch (RuntimeException re) {
-                    tcpClient.handleException(TcpEndPoint.AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, false);
+                    tcpClient.handleException(TcpEndpoint.AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, false);
                 }
             }
         });
@@ -262,7 +262,7 @@ public abstract class TcpChannel implements ReactiveChannel {
                 channelReadyCallback.run();
             } catch (RuntimeException re) {
                 userExceptionHandledIfPresent = true;
-                tcpClient.handleException(TcpEndPoint.AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, true);
+                tcpClient.handleException(TcpEndpoint.AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, true);
             }
 
             if (channelReadyCallbacks != null) {
@@ -275,7 +275,7 @@ public abstract class TcpChannel implements ReactiveChannel {
                         }
 
                         userExceptionHandledIfPresent = true;
-                        tcpClient.handleException(TcpEndPoint.AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, true);
+                        tcpClient.handleException(TcpEndpoint.AutoCloseCondition.ON_USER_CALLBACK_EXCEPTION, re, true);
                     }
                 }
             }

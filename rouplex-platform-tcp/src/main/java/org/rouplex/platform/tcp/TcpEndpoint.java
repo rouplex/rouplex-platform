@@ -21,7 +21,7 @@ import java.util.concurrent.Executor;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-abstract class TcpEndPoint implements Closeable {
+abstract class TcpEndpoint implements Closeable {
     public enum AutoCloseCondition {
         ON_CHANNEL_EOS(1),
         ON_CHANNEL_EXCEPTION(2),
@@ -44,7 +44,7 @@ abstract class TcpEndPoint implements Closeable {
      * @param <T> The type of the instance to be built off this builder, such as {@link TcpClient} or {@link TcpServer}.
      * @param <B> The type of the Builder itself, such as {@link TcpClient.Builder} or {@link TcpServer.Builder}.
      */
-    protected abstract static class TcpEndPointBuilder<T, B extends TcpEndPointBuilder> extends SingleInstanceBuilder<T, B> {
+    protected abstract static class TcpEndpointBuilder<T, B extends TcpEndpointBuilder> extends SingleInstanceBuilder<T, B> {
         protected final TcpReactor.TcpSelector tcpSelector;
         protected Executor eventsExecutor;
 
@@ -58,11 +58,11 @@ abstract class TcpEndPoint implements Closeable {
         protected boolean useDirectBuffers;
         protected int autoCloseMask = AutoCloseCondition.ON_ANY_CONDITION.mask;
 
-        protected TcpEndPointBuilder(TcpReactor.TcpSelector tcpSelector) {
+        protected TcpEndpointBuilder(TcpReactor.TcpSelector tcpSelector) {
             this.tcpSelector = tcpSelector;
         }
 
-        protected TcpEndPointBuilder(TcpReactor tcpReactor) {
+        protected TcpEndpointBuilder(TcpReactor tcpReactor) {
             tcpSelector = tcpReactor.nextTcpSelector();
             eventsExecutor = tcpReactor.eventsExecutor;
         }
@@ -255,7 +255,7 @@ abstract class TcpEndPoint implements Closeable {
          * will be built via this builder or the TcpClients that will be created from a {@link TcpServer} which in turn
          * is created via this builder.
          *
-         * The default is to close the {@link TcpEndPoint} upon any condition present.
+         * The default is to close the {@link TcpEndpoint} upon any condition present.
          *
          * @param autoCloseConditions
          *          A set of disjointed {@link AutoCloseCondition} values
@@ -330,7 +330,7 @@ abstract class TcpEndPoint implements Closeable {
     protected final int autoCloseMask;
 
     // not final, this is set to null for all tcpClient instances after connecting
-    @GuardedBy("lock") protected TcpEndPointBuilder builder;
+    @GuardedBy("lock") protected TcpEndpointBuilder builder;
 
     // not final, set and changed by user
     @GuardedBy("lock") protected Object attachment;
@@ -350,7 +350,7 @@ abstract class TcpEndPoint implements Closeable {
      * Constructor to create an endpoint either via the builder or by wrapping a socket channel, such as the one
      * obtained by a {@link ServerSocketChannel#accept()}.
      */
-    protected TcpEndPoint(SelectableChannel selectableChannel, TcpReactor.TcpSelector tcpSelector, TcpEndPointBuilder builder) {
+    protected TcpEndpoint(SelectableChannel selectableChannel, TcpReactor.TcpSelector tcpSelector, TcpEndpointBuilder builder) {
         this.selectableChannel = selectableChannel;
         this.tcpSelector = tcpSelector;
         this.eventsExecutor = builder.eventsExecutor;
@@ -467,7 +467,7 @@ abstract class TcpEndPoint implements Closeable {
 
     protected void closeAndAsyncUnregister(@Nullable Exception optionalException) throws IOException {
         setExceptionAndCloseChannel(optionalException);
-        tcpSelector.asyncUnregisterTcpEndPoint(TcpEndPoint.this, optionalException);
+        tcpSelector.asyncUnregisterTcpEndpoint(TcpEndpoint.this, optionalException);
     }
 
     /**

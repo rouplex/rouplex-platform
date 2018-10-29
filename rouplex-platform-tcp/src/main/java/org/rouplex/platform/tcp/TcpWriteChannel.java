@@ -41,7 +41,7 @@ public class TcpWriteChannel extends TcpChannel implements ReactiveWriteChannel 
                 }
             } catch (IOException ioe) {
                 // outgoing event fired without any lock acquired
-                tcpClient.handleException(TcpEndPoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION, ioe, false);
+                tcpClient.handleException(TcpEndpoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION, ioe, false);
 
                 synchronized (lock) {
                     lock.notifyAll();
@@ -53,9 +53,9 @@ public class TcpWriteChannel extends TcpChannel implements ReactiveWriteChannel 
                     shutdownSocketChannelAndHandleEos();
                 } catch (IOException ioe) {
                     /*
-                      By default the TcpEndPoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION is set, so the TcpClient will
+                      By default the TcpEndpoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION is set, so the TcpClient will
                       be disconnected and the client will be fired the new event
-                      If TcpEndPoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION flag has been unset, then this exception
+                      If TcpEndpoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION flag has been unset, then this exception
                       will be lost, and without a way to tell the user about it. This is true in the classic socket
                       channels as well, and the reason that any communication must be deemed successful upon receiving
                       EOS from the read channel
@@ -105,7 +105,7 @@ public class TcpWriteChannel extends TcpChannel implements ReactiveWriteChannel 
             } catch (InterruptedException ie) {
                 // just return the number of bytes written prior to this exception
             } catch (IOException ioe) {
-                tcpClient.handleException(TcpEndPoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION,
+                tcpClient.handleException(TcpEndpoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION,
                         ioe, tcpClient.tcpSelector.tcpSelectorThread == Thread.currentThread());
                 throw ioe;
             } finally {
@@ -174,7 +174,7 @@ public class TcpWriteChannel extends TcpChannel implements ReactiveWriteChannel 
             socketChannel.socket().shutdownOutput();
             tcpClient.tcpReadChannel.handleEos();
         } catch (IOException ioe) {
-            tcpClient.handleException(TcpEndPoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION, ioe, false);
+            tcpClient.handleException(TcpEndpoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION, ioe, false);
             throw ioe;
         }
     }

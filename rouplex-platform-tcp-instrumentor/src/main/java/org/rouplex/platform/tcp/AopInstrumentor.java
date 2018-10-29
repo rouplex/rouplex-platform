@@ -112,7 +112,7 @@ public class AopInstrumentor {
         return getRouplexTcpClientReporterOfReceiver(pjp).reportThrottledReceiverConsume(pjp);
     }
 
-    @Around("execution(* org.rouplex.platform.tcp.TcpEndPoint.syncClose(..))")
+    @Around("execution(* org.rouplex.platform.tcp.TcpEndpoint.syncClose(..))")
     public Object aroundHandleClose(ProceedingJoinPoint pjp) throws Throwable {
         return getRouplexTcpClientReporter(pjp).reportHandleClose(pjp);
     }

@@ -19,7 +19,7 @@ import java.util.concurrent.TimeoutException;
  *
  * @author Andi Mullaraj (andimullaraj at gmail.com)
  */
-public class TcpClient extends TcpEndPoint {
+public class TcpClient extends TcpEndpoint {
 
     public static class Builder extends TcpClientBuilder<TcpClient, Builder> {
         public Builder(TcpReactor tcpReactor) {
@@ -44,7 +44,7 @@ public class TcpClient extends TcpEndPoint {
      * <p/>
      * Not thread safe.
      */
-    protected abstract static class TcpClientBuilder<T, B extends TcpClientBuilder> extends TcpEndPointBuilder<T, B> {
+    protected abstract static class TcpClientBuilder<T, B extends TcpClientBuilder> extends TcpEndpointBuilder<T, B> {
         protected SocketAddress remoteAddress;
         protected String remoteHost;
         protected int remotePort;
@@ -241,7 +241,7 @@ public class TcpClient extends TcpEndPoint {
      *          The builder to be used for additional settings inherited from {@link TcpServer}
      */
     private TcpClient(SelectableChannel selectableChannel, TcpReactor.TcpSelector tcpSelector,
-                      TcpEndPointBuilder builder, TcpServer originatingTcpServer, TcpClientListener tcpClientListener) {
+                      TcpEndpointBuilder builder, TcpServer originatingTcpServer, TcpClientListener tcpClientListener) {
         super(selectableChannel, tcpSelector, builder);
 
         this.originatingTcpServer = originatingTcpServer;
@@ -276,7 +276,7 @@ public class TcpClient extends TcpEndPoint {
                     ? -1 : System.currentTimeMillis() + tcpClientBuilder.connectTimeoutMillis;
         }
 
-        tcpSelector.asyncRegisterTcpEndPoint(this);
+        tcpSelector.asyncRegisterTcpEndpoint(this);
 
         if (expirationTimestamp > 0) {
             waitForOpen(expirationTimestamp);

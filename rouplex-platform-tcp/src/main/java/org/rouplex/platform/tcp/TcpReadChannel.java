@@ -88,7 +88,7 @@ public class TcpReadChannel extends TcpChannel implements ReactiveReadChannel {
             } catch (InterruptedException ie) {
                 read = 0;
             } catch (IOException ioe) {
-                tcpClient.handleException(TcpEndPoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION,
+                tcpClient.handleException(TcpEndpoint.AutoCloseCondition.ON_CHANNEL_EXCEPTION,
                         ioe, tcpClient.tcpSelector.tcpSelectorThread == Thread.currentThread());
                 throw ioe;
             } finally {

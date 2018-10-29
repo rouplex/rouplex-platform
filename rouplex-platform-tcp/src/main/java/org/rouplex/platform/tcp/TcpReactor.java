@@ -178,8 +178,8 @@ public class TcpReactor implements Closeable {
         protected final Selector selector;
         protected final Thread tcpSelectorThread;
 
-        @GuardedBy("lock") private List<TcpEndPoint> asyncRegisterTcpEndPoints = new ArrayList<TcpEndPoint>();
-        @GuardedBy("lock") private Map<TcpEndPoint, Exception> asyncUnregisterTcpEndPoints = new HashMap<TcpEndPoint, Exception>();
+        @GuardedBy("lock") private List<TcpEndpoint> asyncRegisterTcpEndpoints = new ArrayList<TcpEndpoint>();
+        @GuardedBy("lock") private Map<TcpEndpoint, Exception> asyncUnregisterTcpEndpoints = new HashMap<TcpEndpoint, Exception>();
         @GuardedBy("lock") private List<TcpClient> asyncAddTcpReadClients = new ArrayList<TcpClient>();
         @GuardedBy("lock") private List<Runnable> asyncAddTcpReadCallbacks = new ArrayList<Runnable>();
         @GuardedBy("lock") private List<TcpClient> asyncAddTcpWriteClients = new ArrayList<TcpClient>();
@@ -228,18 +228,18 @@ public class TcpReactor implements Closeable {
          * background tcpSelectorThread which is tasked with selecting as well as registering new / unregistering old 
          * endpoints.
          *
-         * @param tcpEndPoint
+         * @param tcpEndpoint
          *          The endpoint to be added for selection inside the main loop
          * @throws
          *          IOException if the TcpReactor has already been closed
          */
-        protected void asyncRegisterTcpEndPoint(TcpEndPoint tcpEndPoint) throws IOException {
+        protected void asyncRegisterTcpEndpoint(TcpEndpoint tcpEndpoint) throws IOException {
             synchronized (lock) {
                 if (closeException != null) {
                     throw new IOException("TcpReactor is already closed.");
                 }
 
-                asyncRegisterTcpEndPoints.add(tcpEndPoint);
+                asyncRegisterTcpEndpoints.add(tcpEndpoint);
             }
 
             selector.wakeup();
@@ -265,29 +265,29 @@ public class TcpReactor implements Closeable {
         }
 
         /**
-         * For channels that closed and need to report via selector. Add the tcpEndPoint to be unregistered on next cycle of
+         * For channels that closed and need to report via selector. Add the tcpEndpoint to be unregistered on next cycle of
          * selector.
          *
-         * @param tcpEndPoint
+         * @param tcpEndpoint
          *          The endpoint that needs to be unregistered
          * @param optionalReason
          *          If there was an exception which resulted in the endpoint being closed, null otherwise
          */
-        protected void asyncUnregisterTcpEndPoint(TcpEndPoint tcpEndPoint, Exception optionalReason) throws IOException {
+        protected void asyncUnregisterTcpEndpoint(TcpEndpoint tcpEndpoint, Exception optionalReason) throws IOException {
             synchronized (lock) {
                 if (closeException != null) {
-                    throw new IOException("Cannot unregister EndPoint. Cause: TcpReactor is already closed.");
+                    throw new IOException("Cannot unregister Endpoint. Cause: TcpReactor is already closed.");
                 }
 
-                asyncUnregisterTcpEndPoints.put(tcpEndPoint, optionalReason);
+                asyncUnregisterTcpEndpoints.put(tcpEndpoint, optionalReason);
             }
 
             selector.wakeup();
         }
 
         private boolean processAccumulatedAsyncRequests() {
-            List<TcpEndPoint> registerTcpEndPoints;
-            Map<TcpEndPoint, Exception> unregisterTcpEndPoints;
+            List<TcpEndpoint> registerTcpEndpoints;
+            Map<TcpEndpoint, Exception> unregisterTcpEndpoints;
 
             List<TcpClient> addTcpReadClients;
             List<Runnable> addTcpReadCallbacks;
@@ -299,11 +299,11 @@ public class TcpReactor implements Closeable {
                     return false;
                 }
 
-                if (asyncRegisterTcpEndPoints.isEmpty()) {
-                    registerTcpEndPoints = null;
+                if (asyncRegisterTcpEndpoints.isEmpty()) {
+                    registerTcpEndpoints = null;
                 } else {
-                    registerTcpEndPoints = asyncRegisterTcpEndPoints;
-                    asyncRegisterTcpEndPoints = new ArrayList<TcpEndPoint>();
+                    registerTcpEndpoints = asyncRegisterTcpEndpoints;
+                    asyncRegisterTcpEndpoints = new ArrayList<TcpEndpoint>();
                 }
 
                 if (asyncAddTcpReadClients.isEmpty()) {
@@ -326,11 +326,11 @@ public class TcpReactor implements Closeable {
                     asyncAddTcpWriteCallbacks = new ArrayList<Runnable>();
                 }
 
-                if (asyncUnregisterTcpEndPoints.isEmpty()) {
-                    unregisterTcpEndPoints = null;
+                if (asyncUnregisterTcpEndpoints.isEmpty()) {
+                    unregisterTcpEndpoints = null;
                 } else {
-                    unregisterTcpEndPoints = asyncUnregisterTcpEndPoints;
-                    asyncUnregisterTcpEndPoints = new HashMap<TcpEndPoint, Exception>();
+                    unregisterTcpEndpoints = asyncUnregisterTcpEndpoints;
+                    asyncUnregisterTcpEndpoints = new HashMap<TcpEndpoint, Exception>();
                 }
 
                 if (!pausingInterestOps.isEmpty()) {
@@ -356,9 +356,9 @@ public class TcpReactor implements Closeable {
 
             // Fire only lock-free events towards client! In this particular case, only "connected" event
             // (when TcpClient was accepted via TcpServer) can be fired, and without any side effects
-            if (registerTcpEndPoints != null) {
-                for (TcpEndPoint tcpEndPoint : registerTcpEndPoints) {
-                    tcpEndPoint.syncHandleRegistration();
+            if (registerTcpEndpoints != null) {
+                for (TcpEndpoint tcpEndpoint : registerTcpEndpoints) {
+                    tcpEndpoint.syncHandleRegistration();
                 }
             }
 
@@ -377,9 +377,9 @@ public class TcpReactor implements Closeable {
                 }
             }
 
-            if (unregisterTcpEndPoints != null) {
-                for (Map.Entry<TcpEndPoint, Exception> tcpEndPoint : unregisterTcpEndPoints.entrySet()) {
-                    tcpEndPoint.getKey().syncHandleUnregistration(tcpEndPoint.getValue());
+            if (unregisterTcpEndpoints != null) {
+                for (Map.Entry<TcpEndpoint, Exception> tcpEndpoint : unregisterTcpEndpoints.entrySet()) {
+                    tcpEndpoint.getKey().syncHandleUnregistration(tcpEndpoint.getValue());
                 }
             }
 
@@ -465,8 +465,8 @@ public class TcpReactor implements Closeable {
                                 socketChannel.configureBlocking(false);
                                 TcpSelector tcpSelector = nextTcpSelector();
 
-                                // asyncRegisterTcpEndPoint (and not registerTcpEndPoint) b/c tcpSelector is different
-                                tcpSelector.asyncRegisterTcpEndPoint(
+                                // asyncRegisterTcpEndpoint (and not registerTcpEndpoint) b/c tcpSelector is different
+                                tcpSelector.asyncRegisterTcpEndpoint(
                                         new TcpClient(socketChannel, tcpSelector, (TcpServer) selectionKey.attachment()));
                                 continue;
                             }
@@ -475,7 +475,7 @@ public class TcpReactor implements Closeable {
                             // unregistered the next cycle
                             // 2. or the next selector is closed -- reactor is then closed so no point in surfacing
 
-                            ((TcpEndPoint) selectionKey.attachment()).syncHandleUnregistration(e);
+                            ((TcpEndpoint) selectionKey.attachment()).syncHandleUnregistration(e);
                             continue;
                         }
 
@@ -579,11 +579,11 @@ public class TcpReactor implements Closeable {
          */
         protected void syncClose() {
             for (SelectionKey selectionKey : selector.keys()) {
-                ((TcpEndPoint) selectionKey.attachment()).syncHandleUnregistration(closeException);
+                ((TcpEndpoint) selectionKey.attachment()).syncHandleUnregistration(closeException);
             }
 
-            for (TcpEndPoint tcpEndPoint : asyncRegisterTcpEndPoints) {
-                tcpEndPoint.syncHandleUnregistration(closeException);
+            for (TcpEndpoint tcpEndpoint : asyncRegisterTcpEndpoints) {
+                tcpEndpoint.syncHandleUnregistration(closeException);
             }
 
             try {
