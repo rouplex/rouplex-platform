@@ -1,45 +1,36 @@
 package org.rouplex.tcp;
 
-import org.rouplex.commons.security.SecurityUtils;
 import org.rouplex.platform.tcp.TcpClient;
 import org.rouplex.platform.tcp.TcpClientListener;
 import org.rouplex.platform.tcp.TcpReactor;
 import org.rouplex.platform.tcp.TcpServer;
 
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSocket;
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.concurrent.atomic.AtomicInteger;
 
-class EchoServer implements Closeable {
+public class EchoServer implements Closeable {
     protected final EchoCounts echoCounts = new EchoCounts("server");
-    protected final TcpServer tcpServer;
+    protected final TcpReactor tcpReactor;
+    protected final TcpServer.Builder tcpServerBuilder;
+    protected TcpServer tcpServer;
+    protected int callbackOffenderCount;
+    protected int echoResponderBufferSize = 1000;
+    protected boolean secure;
+    protected boolean useServerExecutor;
 
-    protected EchoServer(
-            TcpReactor tcpReactor,
-            int localPort,
-            final boolean secure,
-            boolean useExecutor,
-            int readBufferSize,
-            int writeBufferSize,
-            final boolean onlyAsyncRW,
-            final int callbackOffenderCount,
-            int backlog,
-            final int echoResponderBufferSize,
-            final boolean useServerExecutor
-    ) throws Exception {
+    public EchoServer(TcpReactor tcpReactor) {
+        this(tcpReactor, false);
+    }
 
+    public EchoServer(TcpReactor tcpReactor, final boolean onlyAsyncRW) {
+        this.tcpReactor = tcpReactor;
         final AtomicInteger sessionId = new AtomicInteger();
-        TcpServer.Builder tcpServerBuilder = new TcpServer.Builder(tcpReactor) {{
+        tcpServerBuilder = new TcpServer.Builder(tcpReactor) {{
             withOnlyAsyncReadWrite(onlyAsyncRW);
         }}
-                .withSecure(secure ? SSLContext.getDefault() : null)
-                .withReadBufferSize(readBufferSize)
-                .withWriteBufferSize(writeBufferSize)
-                .withLocalAddress("localhost", localPort)
-                .withBacklog(backlog)
                 .withTcpClientListener(new TcpClientListener() {
                     @Override
                     public void onConnected(TcpClient tcpClient) {
@@ -79,25 +70,70 @@ class EchoServer implements Closeable {
                                 ? "ok" : optionalReason.getClass().getSimpleName() + ": " + optionalReason.getMessage()));
                     }
                 });
-
-        if (!useExecutor) {
-            tcpServerBuilder.withEventsExecutor(null);
-        }
-
-        tcpServer = tcpServerBuilder.build();
-        tcpServer.bind();
     }
 
-    InetSocketAddress getInetSocketAddress() throws IOException {
+    public EchoServer withLocalPort(int localPort) {
+        tcpServerBuilder.withLocalAddress("localhost", localPort);
+        return this;
+    }
+
+    public EchoServer withSecure(boolean secure) throws Exception {
+        this.secure = secure;
+        tcpServerBuilder.withSecure(secure ? SSLContext.getDefault() : null);
+        return this;
+    }
+
+    public EchoServer withReadBufferSize(int readBufferSize) {
+        tcpServerBuilder.withReadBufferSize(readBufferSize);
+        return this;
+    }
+
+    public EchoServer withWriteBufferSize(int writeBufferSize) {
+        tcpServerBuilder.withWriteBufferSize(writeBufferSize);
+        return this;
+    }
+
+    public EchoServer withBacklog(int backlog) {
+        tcpServerBuilder.withBacklog(backlog);
+        return this;
+    }
+
+    public EchoServer withUseEventsExecutor(boolean useEventsExecutor) {
+        tcpServerBuilder.withEventsExecutor(useEventsExecutor ? tcpReactor.getEventsExecutor() : null);
+        return this;
+    }
+
+    public EchoServer withUseServerExecutor(boolean useServerExecutor) {
+        this.useServerExecutor = useServerExecutor;
+        return this;
+    }
+
+    public EchoServer withCallbackOffenderCount(int callbackOffenderCount) {
+        this.callbackOffenderCount = callbackOffenderCount;
+        return this;
+    }
+
+    public EchoServer withEchoResponderBufferSize(int echoResponderBufferSize) {
+        this.echoResponderBufferSize = echoResponderBufferSize;
+        return this;
+    }
+
+    public InetSocketAddress getInetSocketAddress() throws IOException {
         return (InetSocketAddress) tcpServer.getLocalAddress();
     }
 
-    private static void report(String log) {
-        System.out.println(String.format("%s %s %s", System.currentTimeMillis(), Thread.currentThread(), log));
+    public EchoServer start() throws Exception {
+        tcpServer = tcpServerBuilder.build();
+        tcpServer.bind();
+        return this;
     }
 
     @Override
     public void close() throws IOException {
         tcpServer.close();
+    }
+
+    private static void report(String log) {
+        System.out.println(String.format("%s %s %s", System.currentTimeMillis(), Thread.currentThread(), log));
     }
 }

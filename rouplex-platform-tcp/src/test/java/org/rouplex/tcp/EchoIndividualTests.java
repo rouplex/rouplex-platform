@@ -2,7 +2,6 @@ package org.rouplex.tcp;
 
 import org.junit.Assert;
 import org.junit.Test;
-//import org.rouplex.nio.channels.spi.SSLSelectorProvider;
 import org.rouplex.platform.tcp.TcpReactor;
 
 import java.nio.channels.spi.SelectorProvider;
@@ -10,7 +9,7 @@ import java.util.concurrent.TimeUnit;
 
 public class EchoIndividualTests {
     boolean secure = false; //secure: true;
-    SelectorProvider selectorProvider = null; //secure: SSLSelectorProvider.provider();
+    SelectorProvider selectorProvider = null; //secure: org.rouplex.nio.channels.spi.SSLSelectorProvider.provider();
 
     /**
      * Success with:
@@ -24,10 +23,20 @@ public class EchoIndividualTests {
                 .withThreadCount(1)
                 .build();
 
-        EchoServer echoServer = new EchoServer(tcpReactor, 0, secure, false, 0, 0, false, 0, 0, 1000, false);
-        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpReactor, echoServer.getInetSocketAddress().getPort(), secure, 1, false, 0, 0, false, 0, 20, 1000, 0);
+        EchoServer echoServer = new EchoServer(tcpReactor)
+                .withLocalPort(0)
+                .withSecure(secure)
+                .withUseEventsExecutor(false)
+                .start();
 
-        echoClientGroup.connectionEvents.await(1, TimeUnit.SECONDS);
+        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpReactor, 1)
+                .withRemoteAddress(echoServer.getInetSocketAddress())
+                .withSecure(secure)
+                .withUseEventsExecutor(false)
+                .withPayloadSize(20)
+                .start();
+
+        echoClientGroup.connectionEvents.await(10, TimeUnit.SECONDS);
         echoClientGroup.echoCounts.report();
         echoServer.echoCounts.report();
 
@@ -57,14 +66,26 @@ public class EchoIndividualTests {
                 .withSelectorProvider(selectorProvider).withThreadCount(1).build();
 
         int callbackOffenderCount = 1;
-        EchoServer echoServer = new EchoServer(tcpServerReactor, 0, secure, false, 0, 0, false, callbackOffenderCount, 0, 1000, false);
-        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpClientReactor, echoServer.getInetSocketAddress().getPort(), secure, 2, false, callbackOffenderCount, 0, false, 0, 20, 1000, 0);
+        EchoServer echoServer = new EchoServer(tcpServerReactor)
+                .withLocalPort(0)
+                .withSecure(secure)
+                .withCallbackOffenderCount(callbackOffenderCount)
+                .withUseEventsExecutor(false)
+                .start();
 
-        echoClientGroup.connectionEvents.await(1, TimeUnit.SECONDS);
+        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpClientReactor, 2)
+                .withRemoteAddress(echoServer.getInetSocketAddress())
+                .withSecure(secure)
+                .withCallbackOffenderCount(callbackOffenderCount)
+                .withUseEventsExecutor(false)
+                .withPayloadSize(20)
+                .start();
+
+        echoClientGroup.connectionEvents.await(2, TimeUnit.SECONDS);
         echoClientGroup.echoCounts.report();
         echoServer.echoCounts.report();
 
-        Assert.assertEquals(1, echoClientGroup.connectionEvents.getCount());
+        Assert.assertEquals(0, echoClientGroup.connectionEvents.getCount());
     }
 
     /**
@@ -94,14 +115,26 @@ public class EchoIndividualTests {
                 .withSelectorProvider(selectorProvider).withThreadCount(1).build();
 
         int callbackOffenderCount = 1;
-        EchoServer echoServer = new EchoServer(tcpServerReactor, 0, secure, false, 0, 0, false, callbackOffenderCount, 0, 1000, false);
-        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpClientReactor, echoServer.getInetSocketAddress().getPort(), secure, 2, false, callbackOffenderCount, 0, false, 0, 20, 1000, 0);
+        EchoServer echoServer = new EchoServer(tcpServerReactor)
+                .withLocalPort(0)
+                .withSecure(secure)
+                .withCallbackOffenderCount(callbackOffenderCount)
+                .withUseEventsExecutor(false)
+                .start();
+
+        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpClientReactor, 2)
+                .withRemoteAddress(echoServer.getInetSocketAddress())
+                .withSecure(secure)
+                .withCallbackOffenderCount(callbackOffenderCount)
+                .withUseEventsExecutor(false)
+                .withPayloadSize(20)
+                .start();
 
         echoClientGroup.connectionEvents.await(1, TimeUnit.SECONDS);
         echoClientGroup.echoCounts.report();
         echoServer.echoCounts.report();
 
-        Assert.assertEquals(1, echoClientGroup.connectionEvents.getCount());
+        Assert.assertEquals(0, echoClientGroup.connectionEvents.getCount());
     }
 
     /**
@@ -131,14 +164,26 @@ public class EchoIndividualTests {
                 .withSelectorProvider(selectorProvider).withThreadCount(1).build();
 
         int callbackOffenderCount = 1;
-        EchoServer echoServer = new EchoServer(tcpServerReactor, 0, secure, true, 0, 0, false, callbackOffenderCount, 0, 1000, false);
-        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpClientReactor, echoServer.getInetSocketAddress().getPort(), secure, 2, false, callbackOffenderCount, 0, false, 0, 20, 1000, 0);
+        EchoServer echoServer = new EchoServer(tcpServerReactor)
+                .withLocalPort(0)
+                .withSecure(secure)
+                .withCallbackOffenderCount(callbackOffenderCount)
+                .withUseEventsExecutor(true)
+                .start();
+
+        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpClientReactor, 2)
+                .withRemoteAddress(echoServer.getInetSocketAddress())
+                .withSecure(secure)
+                .withCallbackOffenderCount(callbackOffenderCount)
+                .withUseEventsExecutor(false)
+                .withPayloadSize(20)
+                .start();
 
         echoClientGroup.connectionEvents.await(1, TimeUnit.SECONDS);
         echoClientGroup.echoCounts.report();
         echoServer.echoCounts.report();
 
-        Assert.assertEquals(1, echoClientGroup.connectionEvents.getCount());
+        Assert.assertEquals(0, echoClientGroup.connectionEvents.getCount());
     }
 
     /**
@@ -161,8 +206,20 @@ public class EchoIndividualTests {
         TcpReactor tcpReactor = new TcpReactor.Builder()
                 .withSelectorProvider(selectorProvider).withThreadCount(1).build();
 
-        EchoServer echoServer = new EchoServer(tcpReactor, 0, secure, true, 0, 0, false, 0, 0, 1, false);
-        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpReactor, echoServer.getInetSocketAddress().getPort(), secure, 1, false, 0, 0, false, 0, 10000, 1000, 0);
+        EchoServer echoServer = new EchoServer(tcpReactor)
+                .withLocalPort(0)
+                .withSecure(secure)
+                .withUseEventsExecutor(false)
+                .withEchoResponderBufferSize(1)
+                .start();
+
+        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpReactor, 1)
+                .withRemoteAddress(echoServer.getInetSocketAddress())
+                .withSecure(secure)
+                .withUseEventsExecutor(false)
+                .withPayloadSize(40000)
+                .start();
+
         echoClientGroup.connectionEvents.await(1, TimeUnit.SECONDS);
 
         echoClientGroup.echoCounts.report();
@@ -191,9 +248,21 @@ public class EchoIndividualTests {
                 .withThreadCount(1)
                 .build();
 
-        EchoServer echoServer = new EchoServer(tcpReactor, 0, secure, true, 0, 0, false, 0, 0, 1, true);
-        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpReactor, echoServer.getInetSocketAddress().getPort(), secure, 1, false, 0, 0, false, 0, 10000, 1000, 0);
-        echoClientGroup.connectionEvents.await(1, TimeUnit.SECONDS);
+        EchoServer echoServer = new EchoServer(tcpReactor)
+                .withLocalPort(0)
+                .withSecure(secure)
+                .withUseServerExecutor(true)
+                .withEchoResponderBufferSize(1)
+                .start();
+
+        EchoClientGroup echoClientGroup = new EchoClientGroup(tcpReactor, 1)
+                .withRemoteAddress(echoServer.getInetSocketAddress())
+                .withSecure(secure)
+                .withUseEventsExecutor(false)
+                .withPayloadSize(20000)
+                .start();
+
+        echoClientGroup.connectionEvents.await(2, TimeUnit.SECONDS);
 
         echoClientGroup.echoCounts.report();
         echoServer.echoCounts.report();

@@ -137,7 +137,7 @@ public class TcpServer extends TcpEndPoint {
             }
 
             if (selectableChannel == null) {
-                throw new IllegalStateException("Missing value for localAddress and serverSocketChannel");
+                throw new IllegalStateException("Missing value for localAddress or serverSocketChannel");
             }
 
             if (!((ServerSocketChannel) selectableChannel).socket().isBound()) {

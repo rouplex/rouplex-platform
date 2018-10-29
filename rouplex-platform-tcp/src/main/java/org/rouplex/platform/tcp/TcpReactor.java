@@ -151,6 +151,10 @@ public class TcpReactor implements Closeable {
         return tcpSelectors[tcpSelectorIndex.getAndIncrement() % tcpSelectors.length];
     }
 
+    public Executor getEventsExecutor() {
+        return eventsExecutor;
+    }
+
     @Override
     public void close() {
         Exception exception = new Exception("TcpReactor is closed");
@@ -219,10 +223,6 @@ public class TcpReactor implements Closeable {
             tcpSelectorThread.start();
         }
 
-        protected Set<Thread> getTcpReactorThreads() {
-            return tcpReactorThreads;
-        }
-        
         /**
          * Add the endpoint to be registered on next cycle of selector. We merely keep a reference on it, and wakeup the
          * background tcpSelectorThread which is tasked with selecting as well as registering new / unregistering old 
